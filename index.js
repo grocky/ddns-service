@@ -4,7 +4,7 @@ exports.handler = async (event, context) => {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
     },
-    body: "<p>Hello world!</p>",
+    body: "<p>Bonjour au monde!<p>",
   };
 
   return response;

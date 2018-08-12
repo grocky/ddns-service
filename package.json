@@ -1,6 +1,6 @@
 {
   "name": "ddns-service",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "index.js",
   "engines": { "node": "8.10" },
