@@ -5,7 +5,7 @@
   "main": "index.js",
   "engines": { "node": "8.10" },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test-lambda": "aws lambda invoke --region=us-east-1 --function-name=ddns-service out.txt && cat out.txt | jq"
   },
   "author": "",
   "license": "ISC"
