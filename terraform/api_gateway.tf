@@ -53,3 +53,6 @@ resource "aws_api_gateway_deployment" "ddns-service" {
   stage_name  = "test"
 }
 
+output "base_url" {
+  value = "${aws_api_gateway_deployment.ddns-service.invoke_url}"
+}
