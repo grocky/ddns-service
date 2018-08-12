@@ -2,6 +2,9 @@ provider "aws" {
   region = "us-east-1"
 }
 
+variable "app_version" {
+}
+
 resource "aws_iam_role" "lambda_exec" {
   name = "lambda_exec"
 
@@ -26,7 +29,7 @@ resource "aws_lambda_function" "ddns-service" {
   function_name = "ddns-service"
 
   s3_bucket = "grocky-services"
-  s3_key    = "ddns-service-1.0.0.zip"
+  s3_key    = "ddns-service-${var.app_version}.zip"
 
   handler = "index.handler"
   runtime = "nodejs8.10"
