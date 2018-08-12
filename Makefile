@@ -8,23 +8,27 @@ BUILD_DIR=dist
 
 ##### Targets ######
 
-build: ensure-build $(BUILD_DIR)/$(APP_ARCHIVE)
+build: _ensure-build _archive-source
 
+_archive-source: $(BUILD_DIR)/$(APP_ARCHIVE)
 $(BUILD_DIR)/$(APP_ARCHIVE):
 	zip $@ index.js
 
-ensure-build: $(BUILD_DIR)
-
+_ensure-build: $(BUILD_DIR)
 $(BUILD_DIR):
 	@mkdir -p $@
 
-s3-bucket:
+_s3-bucket: $(BUILD_DIR)/s3-bucket
+$(BUILD_DIR)/s3-bucket:
 	aws s3api create-bucket --region=us-east-1 --bucket=$(BUCKET_NAME)
-	touch s3-bucket
+	touch $(BUILD_DIR)/s3-bucket
 
-deploy: s3-bucket
-	aws s3 cp example.zip s3://$(BUCKET_NAME)/v$(APP_VERSION)/example.zip
-	touch deploy
+deploy: _ensure-build _s3-bucket _upload-archive
+
+_upload-archive: $(BUILD_DIR)/deploy-$(APP_VERSION)
+$(BUILD_DIR)/deploy-$(APP_VERSION):
+	aws s3 cp $(BUILD_DIR)/$(APP_ARCHIVE) s3://$(BUCKET_NAME)/$(APP_ARCHIVE)
+	@touch $@
 
 clean:
 	@rm -rf $(BUILD_DIR)
