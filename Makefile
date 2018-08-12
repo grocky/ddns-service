@@ -23,7 +23,7 @@ $(BUILD_DIR)/s3-bucket:
 	aws s3api create-bucket --region=us-east-1 --bucket=$(BUCKET_NAME)
 	touch $(BUILD_DIR)/s3-bucket
 
-deploy: _ensure-build _s3-bucket _upload-archive
+deploy: build _s3-bucket _upload-archive
 
 _upload-archive: $(BUILD_DIR)/deploy-$(APP_VERSION)
 $(BUILD_DIR)/deploy-$(APP_VERSION):
