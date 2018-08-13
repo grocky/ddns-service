@@ -23,12 +23,16 @@ $(BUILD_DIR)/s3-bucket:
 	aws s3api create-bucket --region=us-east-1 --bucket=$(BUCKET_NAME)
 	touch $(BUILD_DIR)/s3-bucket
 
-deploy: build _s3-bucket _upload-archive
+publish: build _s3-bucket _upload-archive
 
 _upload-archive: $(BUILD_DIR)/deploy-$(APP_VERSION)
 $(BUILD_DIR)/deploy-$(APP_VERSION):
 	aws s3 cp $(BUILD_DIR)/$(APP_ARCHIVE) s3://$(BUCKET_NAME)/$(APP_ARCHIVE)
 	@touch $@
+
+.PHONY: deploy
+deploy: build publish
+	cd terraform; terraform apply -var 'app_version=$(APP_VERSION)' -auto-approve
 
 clean:
 	@rm -rf $(BUILD_DIR)
