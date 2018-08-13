@@ -1,12 +1,10 @@
 exports.handler = async (event, context) => {
-  const response = {
+  return {
     statusCode: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
     },
-    body: "<p>Bonjour au monde!<p>",
+    body: JSON.stringify({ event, context }, null, 2),
   };
-
-  return response;
 };
 
