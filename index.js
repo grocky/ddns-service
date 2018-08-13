@@ -9,15 +9,17 @@ const router = new Router({
     }
   ],
   routes: [
-    'GET', '/public-ip', (event) => {
-      const clientIp = event.headers['X-Forwarded-For'] || 'unknown';
-      return {
-        statusCode: 200,
-        body: {
-          publicIp: clientIp
+    [
+      'GET', '/public-ip', (event) => {
+        const clientIp = event.headers['X-Forwarded-For'] || 'unknown';
+        return {
+          statusCode: 200,
+          body: {
+            publicIp: clientIp
+          }
         }
       }
-    }
+    ]
   ],
   defaultRoute: (event) => ({
     statusCode: 404,
@@ -35,8 +37,10 @@ exports.handler = async (event, context) => {
   } catch (e) {
     console.error(e);
     return {
-      statusCode: 500,
-      body: e.message
+      statusCode: 501,
+      body: {
+        message: e.message
+      }
     };
   }
 };
