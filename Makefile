@@ -8,6 +8,7 @@ BUILD_DIR=dist
 
 ##### Targets ######
 
+.PHONY: build
 build: _ensure-build _archive-source
 
 _archive-source: $(BUILD_DIR)/$(APP_ARCHIVE)

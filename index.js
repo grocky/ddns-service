@@ -14,19 +14,19 @@ const router = new Router({
         const clientIp = event.headers['X-Forwarded-For'] || 'unknown';
         return {
           statusCode: 200,
-          body: {
+          body: JSON.stringify({
             publicIp: clientIp
-          }
+          })
         }
       }
     ]
   ],
   defaultRoute: (event) => ({
     statusCode: 404,
-    body: {
+    body: JSON.stringify({
       message: 'Resource not found',
       resource: event.path
-    }
+    })
   })
 });
 
