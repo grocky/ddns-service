@@ -3,10 +3,16 @@
   "version": "1.0.2",
   "description": "",
   "main": "index.js",
-  "engines": { "node": "8.10" },
+  "engines": {
+    "node": "8.10"
+  },
   "scripts": {
     "test-lambda": "aws lambda invoke --region=us-east-1 --function-name=ddns-service out.txt && cat out.txt | jq"
   },
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "bluebird": "3.5.1",
+    "path-to-regexp": "2.2.1"
+  }
 }
