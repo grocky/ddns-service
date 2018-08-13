@@ -1,3 +1,7 @@
+variable "app_environment" {
+  default = "test"
+}
+
 resource "aws_api_gateway_rest_api" "ddns-service" {
   name        = "ddns-service"
   description = "Dynamic DNS service interface"
@@ -50,7 +54,13 @@ resource "aws_api_gateway_deployment" "ddns-service" {
   ]
 
   rest_api_id = "${aws_api_gateway_rest_api.ddns-service.id}"
-  stage_name  = "test"
+  stage_name  = "${var.app_environment}"
+}
+
+resource "aws_api_gateway_base_path_mapping" "base-path" {
+  api_id      = "${aws_api_gateway_rest_api.ddns-service.id}"
+  stage_name  = "${aws_api_gateway_deployment.ddns-service.stage_name}"
+  domain_name = "${aws_api_gateway_domain_name.ddns-service.domain_name}"
 }
 
 output "gateway_base_url" {

@@ -2,8 +2,7 @@ provider "aws" {
   region = "us-east-1"
 }
 
-variable "app_version" {
-}
+variable "app_version" { }
 
 resource "aws_iam_role" "lambda_exec" {
   name = "lambda_exec"
