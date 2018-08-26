@@ -4,7 +4,7 @@ APP_VERSION := $(shell cat package.json | jq '.version' -r)
 BUCKET_NAME=grocky-services
 APP_ARCHIVE=$(PROJECT_NAME)-$(APP_VERSION).zip
 
-BUILD_DIR=dist
+BUILD_DIR=bin
 
 ##### Targets ######
 
