@@ -20,6 +20,11 @@ _ensure-package-js: $(BUILD_DIR)
 $(BUILD_DIR):
 	@mkdir -p $@
 
+publish: package _s3-bucket _upload-archive
+_upload-archive: $(BUILD_DIR)/publish-$(APP_VERSION)
+$(BUILD_DIR)/publish-$(APP_VERSION):
+	@aws s3 cp $(BUILD_DIR)/$(APP_ARCHIVE) s3://$(BUCKET_NAME)/$(APP_ARCHIVE)
+
 .PHONY: deploy
 deploy: package publish
 	cd terraform; terraform apply -var 'app_version=$(APP_VERSION)' -auto-approve
@@ -45,11 +50,6 @@ package: $(BUILD_DIR)/$(APP_ARCHIVE)
 $(BUILD_DIR)/$(APP_ARCHIVE):
 	zip -j $@ ${BUILD_BIN}
 
-publish: package _s3-bucket _upload-archive
-_upload-archive: $(BUILD_DIR)/publish-$(APP_VERSION)
-$(BUILD_DIR)/publish-$(APP_VERSION):
-	@aws s3 cp $(BUILD_DIR)/$(APP_ARCHIVE) s3://$(BUCKET_NAME)/$(APP_ARCHIVE)
-
 ### NODE Impl ###
 
 .PHONY: package-js
@@ -59,11 +59,6 @@ $(BUILD_DIR)/$(APP_ARCHIVE)_js:
 	zip -r $@ index.js src node_modules
 
 publish-js: package-js _s3-bucket _upload-archive
-
-_upload-archive: $(BUILD_DIR)/publish-js-$(APP_VERSION)
-$(BUILD_DIR)/publish-js-$(APP_VERSION):
-	aws s3 cp $(BUILD_DIR)/$(APP_ARCHIVE) s3://$(BUCKET_NAME)/$(APP_ARCHIVE)
-	@touch $@
 
 clean:
 	@rm -rf $(BUILD_DIR)
