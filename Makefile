@@ -1,5 +1,5 @@
 PROJECT_NAME=ddns-service
-APP_VERSION := $(shell cat package-js.json | jq '.version' -r)
+APP_VERSION := $(shell git describe --always --long --dirty)
 
 BUCKET_NAME=grocky-services
 APP_ARCHIVE=$(PROJECT_NAME)-$(APP_VERSION).zip
