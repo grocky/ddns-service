@@ -11,6 +11,9 @@ LOCAL_OS := $(shell uname | tr '[:upper:]' '[:lower:]')
 
 ##### Targets ######
 
+clean:
+	@rm -rf $(BUILD_DIR)
+
 _s3-bucket: $(BUILD_DIR)/s3-bucket
 $(BUILD_DIR)/s3-bucket:
 	aws s3api create-bucket --region=us-east-1 --bucket=$(BUCKET_NAME)
@@ -26,7 +29,7 @@ $(BUILD_DIR)/publish-$(APP_VERSION):
 	@aws s3 cp $(BUILD_DIR)/$(APP_ARCHIVE) s3://$(BUCKET_NAME)/$(APP_ARCHIVE)
 
 .PHONY: deploy
-deploy: package publish
+deploy: publish
 	cd terraform; terraform apply -var 'app_version=$(APP_VERSION)' -auto-approve
 
 ### Go Impl ###
@@ -49,17 +52,3 @@ ${BUILD_BIN}:
 package: _ensure-package $(BUILD_DIR)/$(APP_ARCHIVE)
 $(BUILD_DIR)/$(APP_ARCHIVE):
 	zip -j $@ ${BUILD_BIN}
-
-### NODE Impl ###
-
-.PHONY: package-js
-package-js: _ensure-package _archive-source
-_archive-source: $(BUILD_DIR)/$(APP_ARCHIVE)_js
-$(BUILD_DIR)/$(APP_ARCHIVE)_js:
-	zip -r $@ index.js src node_modules
-
-publish-js: package-js _s3-bucket _upload-archive
-
-clean:
-	@rm -rf $(BUILD_DIR)
-
