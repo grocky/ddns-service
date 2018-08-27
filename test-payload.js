@@ -1,7 +1,7 @@
 {
-  "path": "/test/hello",
+  "path": "/public-ip",
   "headers": {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept": "application/json",
     "Accept-Encoding": "gzip, deflate, lzma, sdch, br",
     "Accept-Language": "en-US,en;q=0.8",
     "CloudFront-Forwarded-Proto": "https",
@@ -20,7 +20,7 @@
     "X-Forwarded-Proto": "https"
   },
   "pathParameters": {
-    "proxy": "hello"
+    "proxy": "public-ip"
   },
   "requestContext": {
     "accountId": "123456789012",
