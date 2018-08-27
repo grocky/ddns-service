@@ -33,7 +33,7 @@ deploy: publish
 	cd terraform; terraform apply -var 'app_version=$(APP_VERSION)' -auto-approve
 
 invoke:
-	aws lambda invoke --region=us-east-1 --function-name=${PROJECT_NAME} --payload file://test-payload.js out.txt
+	aws lambda invoke --region=us-east-1 --function-name=${PROJECT_NAME} --payload file://test-payload.js logs/out.txt
 
 ### Go Impl ###
 
