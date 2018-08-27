@@ -30,7 +30,7 @@ resource "aws_lambda_function" "ddns-service" {
   s3_bucket = "grocky-services"
   s3_key    = "ddns-service-${var.app_version}.zip"
 
-  handler = "main"
+  handler = "ddns-service_linux_${var.app_version}"
   runtime = "go1.x"
 
   role = "${aws_iam_role.lambda_exec.arn}"

@@ -16,7 +16,7 @@ $(BUILD_DIR)/s3-bucket:
 	aws s3api create-bucket --region=us-east-1 --bucket=$(BUCKET_NAME)
 	touch $(BUILD_DIR)/s3-bucket
 
-_ensure-package-js: $(BUILD_DIR)
+_ensure-package: $(BUILD_DIR)
 $(BUILD_DIR):
 	@mkdir -p $@
 
@@ -46,7 +46,7 @@ build: ${BUILD_BIN}
 ${BUILD_BIN}:
 	env GOOS=linux GOARCH=amd64 go build -o $@ main.go
 
-package: $(BUILD_DIR)/$(APP_ARCHIVE)
+package: _ensure-package $(BUILD_DIR)/$(APP_ARCHIVE)
 $(BUILD_DIR)/$(APP_ARCHIVE):
 	zip -j $@ ${BUILD_BIN}
 
