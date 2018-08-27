@@ -5,7 +5,7 @@ BUCKET_NAME=grocky-services
 APP_ARCHIVE=$(PROJECT_NAME)-$(APP_VERSION).zip
 
 BUILD_DIR=bin
-BUILD_BIN=${BUILD_DIR}/${PROJECT_NAME}_linux
+BUILD_BIN=${BUILD_DIR}/${PROJECT_NAME}_linux_${APP_VERSION}
 
 LOCAL_OS := $(shell uname | tr '[:upper:]' '[:lower:]')
 
@@ -28,8 +28,8 @@ install:
 	go get github.com/stretchr/testify/assert
 
 .PHONY: build-local ${BUILD_DIR}/${PROJECT_NAME}_${LOCAL_OS}
-build-local: ${BUILD_DIR}/${PROJECT_NAME}_${LOCAL_OS}
-${BUILD_DIR}/${PROJECT_NAME}_${LOCAL_OS}:
+build-local: ${BUILD_DIR}/${PROJECT_NAME}_${LOCAL_OS}_${APP_VERSION}
+${BUILD_DIR}/${PROJECT_NAME}_${LOCAL_OS}_${APP_VERSION}:
 	env GOOS=${LOCAL_OS} GOARCH=amd64 go build -o ${BUILD_DIR}/${PROJECT_NAME}_${LOCAL_OS} main.go
 
 .PHONY: build ${BUILD_DIR}/${PROJECT_NAME}_linux
