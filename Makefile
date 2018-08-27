@@ -41,6 +41,11 @@ package: $(BUILD_DIR)/$(APP_ARCHIVE)
 $(BUILD_DIR)/$(APP_ARCHIVE):
 	zip -j $@ ${BUILD_BIN}
 
+publish: package _s3-bucket _upload-archive
+_upload-archive: $(BUILD_DIR)/publish-$(APP_VERSION)
+$(BUILD_DIR)/publish-$(APP_VERSION):
+	@aws s3 cp $(BUILD_DIR)/$(APP_ARCHIVE) s3://$(BUCKET_NAME)/$(APP_ARCHIVE)
+
 ### NODE Impl ###
 
 .PHONY: package-js
