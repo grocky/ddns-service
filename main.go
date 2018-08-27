@@ -20,7 +20,7 @@ type ErrorResponse struct {
   Description string `json:"description"`
 }
 
-func handleRequest(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 
   clientIp := request.Headers["X-Forwarded-For"]
 
@@ -70,5 +70,5 @@ func buildErrorResponse(description string) string {
 
 func main() {
   fmt.Print(os.Getenv("_LAMBDA_SERVER_PORT"))
-  lambda.Start(handleRequest)
+  lambda.Start(Handler)
 }
