@@ -20,6 +20,10 @@ _ensure-package-js: $(BUILD_DIR)
 $(BUILD_DIR):
 	@mkdir -p $@
 
+.PHONY: deploy
+deploy: package publish
+	cd terraform; terraform apply -var 'app_version=$(APP_VERSION)' -auto-approve
+
 ### Go Impl ###
 
 install:
@@ -60,10 +64,6 @@ _upload-archive: $(BUILD_DIR)/publish-js-$(APP_VERSION)
 $(BUILD_DIR)/publish-js-$(APP_VERSION):
 	aws s3 cp $(BUILD_DIR)/$(APP_ARCHIVE) s3://$(BUCKET_NAME)/$(APP_ARCHIVE)
 	@touch $@
-
-.PHONY: deploy
-deploy-js: package-js publish-js
-	cd terraform; terraform apply -var 'app_version=$(APP_VERSION)' -auto-approve
 
 clean:
 	@rm -rf $(BUILD_DIR)
