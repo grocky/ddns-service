@@ -20,7 +20,7 @@ type ErrorResponse struct {
   Description string `json:"description"`
 }
 
-func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func GetPublicApiHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 
   clientIp := request.Headers["X-Forwarded-For"]
 
@@ -30,13 +30,24 @@ func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
   js, err := json.Marshal(ClientIpResponse{clientIp})
   if err != nil {
-   return serverError(err)
+    return serverError(err)
   }
 
   return events.APIGatewayProxyResponse{
     StatusCode: 200,
     Body: string(js),
   }, nil
+}
+
+func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+  method := request.HTTPMethod
+  route := request.Path
+
+  if (method == http.MethodGet && route == "/public-ip") {
+    return GetPublicApiHandler(request)
+  }
+
+  return clientError(http.StatusNotFound, fmt.Sprintf("Unknown endpoint %s %s", method, route))
 }
 
 func serverError(err error) (events.APIGatewayProxyResponse, error) {
