@@ -8,14 +8,14 @@ BUILD_DIR=bin
 
 ##### Targets ######
 
-.PHONY: build
-build: _ensure-build _archive-source
+.PHONY: package
+package: _ensure-package _archive-source
 
 _archive-source: $(BUILD_DIR)/$(APP_ARCHIVE)
 $(BUILD_DIR)/$(APP_ARCHIVE):
 	zip -r $@ index.js src node_modules
 
-_ensure-build: $(BUILD_DIR)
+_ensure-package: $(BUILD_DIR)
 $(BUILD_DIR):
 	@mkdir -p $@
 
@@ -24,7 +24,7 @@ $(BUILD_DIR)/s3-bucket:
 	aws s3api create-bucket --region=us-east-1 --bucket=$(BUCKET_NAME)
 	touch $(BUILD_DIR)/s3-bucket
 
-publish: build _s3-bucket _upload-archive
+publish: package _s3-bucket _upload-archive
 
 _upload-archive: $(BUILD_DIR)/publish-$(APP_VERSION)
 $(BUILD_DIR)/publish-$(APP_VERSION):
@@ -32,7 +32,7 @@ $(BUILD_DIR)/publish-$(APP_VERSION):
 	@touch $@
 
 .PHONY: deploy
-deploy: build publish
+deploy: package publish
 	cd terraform; terraform apply -var 'app_version=$(APP_VERSION)' -auto-approve
 
 clean:
