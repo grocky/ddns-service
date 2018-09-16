@@ -22,4 +22,3 @@ curl: (6) Could not resolve host: _ff5c13ee6052045e98d30570a20e010d.ddns.rockygr
 Requests to the custom domain need to be over https!
 
 > TODO: figure out http -> https redirect...
-
