@@ -11,6 +11,17 @@ LOCAL_OS := $(shell uname | tr '[:upper:]' '[:lower:]')
 
 ##### Targets ######
 
+### Terraform ###
+
+.PHONY: plan
+tf-plan:
+	cd terraform; terraform plan -var 'app_version=$(APP_VERSION)'
+
+.PHONY: init
+tf-init:
+	cd terraform; terraform init
+
+### Application ####
 clean:
 	@rm -rf $(BUILD_DIR)
 
@@ -33,7 +44,10 @@ deploy: publish
 	cd terraform; terraform apply -var 'app_version=$(APP_VERSION)' -auto-approve
 
 invoke:
-	aws lambda invoke --region=us-east-1 --function-name=${PROJECT_NAME} --payload file://test-payload.js logs/out.txt
+	aws lambda invoke --region=us-east-1 --function-name=${PROJECT_NAME} --payload file://test-payload.json logs/out.txt
+
+test:
+	http https://ddns.rockygray.com/public-ip
 
 ### Go Impl ###
 
