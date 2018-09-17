@@ -16,7 +16,7 @@ type ClientIpResponse struct {
 }
 
 type ErrorResponse struct {
-  Description string `json:"Description"`
+  Description string `json:"description"`
 }
 
 type RequestError struct {
