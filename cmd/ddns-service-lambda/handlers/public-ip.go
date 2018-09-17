@@ -42,6 +42,8 @@ func GetPublicIPHandler(request events.APIGatewayProxyRequest, logger log.Logger
     return response, &RequestError{http.StatusBadRequest, "Client IP not found"}
   }
 
+  logger.Printf("Recognized public ip: %s", clientIp)
+
   return ClientIpResponse{http.StatusOK, ResponseBody{PublicIp: clientIp}}, requestError
 }
 

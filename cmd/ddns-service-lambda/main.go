@@ -26,8 +26,6 @@ func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
       return clientError(*requestError)
     }
 
-    //logger.Printf("Recognized public ip: %s", clientIp)
-
     js, err := json.Marshal(response.Body)
     if err != nil {
       return serverError(err)
