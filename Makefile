@@ -64,7 +64,7 @@ ${BUILD_DIR}/${PROJECT_NAME}_${LOCAL_OS}_${APP_VERSION}:
 .PHONY: build ${BUILD_DIR}/${PROJECT_NAME}_linux
 build: ${BUILD_BIN}
 ${BUILD_BIN}:
-	env GOOS=linux GOARCH=amd64 go build -o $@ main.go
+	env GOOS=linux GOARCH=amd64 go build -o $@ cmd/ddns-service-lambda/main.go
 
 package: _ensure-package $(BUILD_DIR)/$(APP_ARCHIVE)
 $(BUILD_DIR)/$(APP_ARCHIVE):
