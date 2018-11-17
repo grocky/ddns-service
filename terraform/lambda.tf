@@ -1,7 +1,3 @@
-provider "aws" {
-  region = "us-east-1"
-}
-
 variable "app_version" { }
 
 data "template_file" "ddns-service-lambda-assume-role-policy" {

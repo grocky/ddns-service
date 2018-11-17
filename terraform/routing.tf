@@ -1,5 +1,5 @@
 data "aws_route53_zone" "selected" {
-  name = "rockygray.com."
+  zone_id = "Z33Z8O8Z1ZA8HH"
   private_zone = false
 }
 
