@@ -3,16 +3,18 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
-  "github.com/grocky/ddns-service/cmd/ddns-service-lambda/handlers"
-  "log"
+	"log"
 	"net/http"
 	"os"
+
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/grocky/ddns-service/cmd/ddns-service-lambda/handlers"
 )
 
-var logger = log.New(os.Stdout, "ddns-service : ", log.LstdFlags | log.Llongfile )
+var logger = log.New(os.Stdout, "ddns-service : ", log.LstdFlags|log.Llongfile)
 
+// Handler handle the API gateway request
 func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	method := request.HTTPMethod
 	route := request.Path
@@ -22,19 +24,19 @@ func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 
 	if method == http.MethodGet && route == "/public-ip" {
 		response, requestError = handlers.GetPublicIPHandler(request, *logger)
-    if requestError != nil {
-      return clientError(*requestError)
-    }
+		if requestError != nil {
+			return clientError(*requestError)
+		}
 
-    js, err := json.Marshal(response.Body)
-    if err != nil {
-      return serverError(err)
-    }
+		js, err := json.Marshal(response.Body)
+		if err != nil {
+			return serverError(err)
+		}
 
-    return events.APIGatewayProxyResponse{
-      StatusCode: response.Status,
-      Body:       string(js),
-    }, nil
+		return events.APIGatewayProxyResponse{
+			StatusCode: response.Status,
+			Body:       string(js),
+		}, nil
 	}
 
 	return clientError(handlers.RequestError{http.StatusNotFound, fmt.Sprintf("Resource not found: %s", route)})
