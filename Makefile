@@ -9,14 +9,19 @@ BUILD_BIN=${BUILD_DIR}/${PROJECT_NAME}_linux_${APP_VERSION}
 
 LOCAL_OS := $(shell uname | tr '[:upper:]' '[:lower:]')
 
+GREEN  := $(shell tput -Txterm setaf 2)
+YELLOW := $(shell tput -Txterm setaf 3)
+BLUE  := $(shell tput -Txterm setaf 4)
+WHITE  := $(shell tput -Txterm setaf 7)
+RESET  := $(shell tput -Txterm sgr0)
+
 ##### Targets ######
 .PHONY: help
 .DEFAULT_GOAL := help
 
 help: ## print this help message
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_\/-]+:.*?## / {printf "\033[34m%-30s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST) | \
-        sort | \
-        grep -v '#'
+	@awk -F ':|##' '/^[^\t].+?:.*?##/ { printf "${BLUE}%-20s${RESET}%s\n", $$1, $$NF }' $(MAKEFILE_LIST) | \
+        sort
 
 ### Terraform ###
 
