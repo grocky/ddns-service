@@ -20,12 +20,15 @@ func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	route := request.Path
 
 	var response handlers.ClientIpResponse
-	var requestError *handlers.RequestError
+	var requestError *handlers.RequestError = &handlers.RequestError{
+		Status:      http.StatusNotFound,
+		Description: fmt.Sprintf("Resource not found: %s", route),
+	}
 
 	if method == http.MethodGet && route == "/public-ip" {
 		response, requestError = handlers.GetPublicIPHandler(request, *logger)
 		if requestError != nil {
-			return clientError(*requestError)
+			return clientError(requestError)
 		}
 
 		js, err := json.Marshal(response.Body)
@@ -39,7 +42,7 @@ func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, nil
 	}
 
-	return clientError(handlers.RequestError{http.StatusNotFound, fmt.Sprintf("Resource not found: %s", route)})
+	return clientError(requestError)
 }
 
 func serverError(err error) (events.APIGatewayProxyResponse, error) {
@@ -52,7 +55,7 @@ func serverError(err error) (events.APIGatewayProxyResponse, error) {
 }
 
 // Similarly add a helper for send responses relating to client errors.
-func clientError(requestError handlers.RequestError) (events.APIGatewayProxyResponse, error) {
+func clientError(requestError *handlers.RequestError) (events.APIGatewayProxyResponse, error) {
 	return events.APIGatewayProxyResponse{
 		StatusCode: requestError.Status,
 		Body:       buildErrorResponse(requestError.Error()),
