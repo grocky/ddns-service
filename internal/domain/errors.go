@@ -14,4 +14,22 @@ var (
 
 	// ErrInvalidIP is returned when the IP address is invalid.
 	ErrInvalidIP = errors.New("invalid IP address")
+
+	// ErrMissingEmail is returned when email is empty.
+	ErrMissingEmail = errors.New("email is required")
+
+	// ErrInvalidEmail is returned when email format is invalid.
+	ErrInvalidEmail = errors.New("invalid email address")
+
+	// ErrOwnerExists is returned when trying to create an owner that already exists.
+	ErrOwnerExists = errors.New("owner already exists")
+
+	// ErrOwnerNotFound is returned when an owner doesn't exist.
+	ErrOwnerNotFound = errors.New("owner not found")
+
+	// ErrUnauthorized is returned when authentication fails.
+	ErrUnauthorized = errors.New("unauthorized")
+
+	// ErrForbidden is returned when the authenticated owner doesn't match the requested resource.
+	ErrForbidden = errors.New("forbidden")
 )
