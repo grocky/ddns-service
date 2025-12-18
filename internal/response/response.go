@@ -16,6 +16,20 @@ type ClientIPBody struct {
 	PublicIP string `json:"publicIp"`
 }
 
+// MappingResponse represents a response containing an IP mapping.
+type MappingResponse struct {
+	Status int
+	Body   MappingBody
+}
+
+// MappingBody is the JSON body for a mapping response.
+type MappingBody struct {
+	OwnerID   string `json:"ownerId"`
+	Location  string `json:"location"`
+	IP        string `json:"ip"`
+	UpdatedAt string `json:"updatedAt"`
+}
+
 // ErrorBody is the JSON body for error responses.
 type ErrorBody struct {
 	Description string `json:"description"`
