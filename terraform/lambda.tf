@@ -49,7 +49,35 @@ resource "aws_iam_role_policy" "dynamodb" {
           "dynamodb:Query",
           "dynamodb:Scan"
         ]
-        Resource = aws_dynamodb_table.ip_mappings.arn
+        Resource = [
+          aws_dynamodb_table.ip_mappings.arn,
+          aws_dynamodb_table.owners.arn
+        ]
+      }
+    ]
+  })
+}
+
+# SES email sending policy
+resource "aws_iam_role_policy" "ses" {
+  name = "ses-send-email"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:SendEmail",
+          "ses:SendRawEmail"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "ses:FromAddress" = "noreply@rockygray.com"
+          }
+        }
       }
     ]
   })

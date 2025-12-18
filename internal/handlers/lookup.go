@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/grocky/ddns-service/internal/auth"
 	"github.com/grocky/ddns-service/internal/repository"
 	"github.com/grocky/ddns-service/internal/response"
 )
 
 // Lookup handles IP lookup requests.
 // Path format: /lookup/{ownerId}/{location}
+// Requires authentication via API key.
 func Lookup(
 	ctx context.Context,
 	request events.APIGatewayProxyRequest,
@@ -40,6 +42,12 @@ func Lookup(
 			Status:      http.StatusBadRequest,
 			Description: "ownerId and location are required",
 		}
+	}
+
+	// Authenticate - verify API key matches the ownerId in the path
+	_, authErr := auth.Authenticate(ctx, request, ownerID, repo, logger)
+	if authErr != nil {
+		return response.MappingResponse{}, authErr
 	}
 
 	// Lookup in repository

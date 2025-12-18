@@ -30,6 +30,32 @@ type MappingBody struct {
 	UpdatedAt string `json:"updatedAt"`
 }
 
+// OwnerResponse represents a response containing owner information.
+type OwnerResponse struct {
+	Status int
+	Body   OwnerBody
+}
+
+// OwnerBody is the JSON body for an owner response.
+type OwnerBody struct {
+	OwnerID   string `json:"ownerId"`
+	Email     string `json:"email,omitempty"`
+	APIKey    string `json:"apiKey,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	RotatedAt string `json:"rotatedAt,omitempty"`
+}
+
+// MessageResponse represents a simple message response.
+type MessageResponse struct {
+	Status int
+	Body   MessageBody
+}
+
+// MessageBody is the JSON body for a message response.
+type MessageBody struct {
+	Message string `json:"message"`
+}
+
 // ErrorBody is the JSON body for error responses.
 type ErrorBody struct {
 	Description string `json:"description"`

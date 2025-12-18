@@ -14,6 +14,8 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/ses"
+	"github.com/grocky/ddns-service/internal/email"
 	"github.com/grocky/ddns-service/internal/handlers"
 	"github.com/grocky/ddns-service/internal/repository"
 	"github.com/grocky/ddns-service/internal/response"
@@ -24,13 +26,14 @@ var (
 		Level: slog.LevelInfo,
 	}))
 	repo     repository.Repository
+	emailSvc email.Service
 	initOnce sync.Once
 	initErr  error
 )
 
-func initRepo(ctx context.Context) error {
+func initServices(ctx context.Context) error {
 	initOnce.Do(func() {
-		logger.Info("initializing repository")
+		logger.Info("initializing services")
 
 		cfg, err := config.LoadDefaultConfig(ctx)
 		if err != nil {
@@ -39,10 +42,15 @@ func initRepo(ctx context.Context) error {
 			return
 		}
 
-		client := dynamodb.NewFromConfig(cfg)
-		repo = repository.NewDynamoDBRepository(client, logger)
+		// Initialize DynamoDB repository
+		dynamoClient := dynamodb.NewFromConfig(cfg)
+		repo = repository.NewDynamoDBRepository(dynamoClient, logger)
 
-		logger.Info("repository initialized")
+		// Initialize SES email service
+		sesClient := ses.NewFromConfig(cfg)
+		emailSvc = email.NewSESService(sesClient, logger)
+
+		logger.Info("services initialized")
 	})
 	return initErr
 }
@@ -54,7 +62,7 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	logger.Info("request received", "method", method, "route", route)
 
-	// GET /public-ip - doesn't need DynamoDB
+	// GET /public-ip - doesn't need any services
 	if method == http.MethodGet && route == "/public-ip" {
 		resp, reqErr := handlers.GetPublicIP(request, logger)
 		if reqErr != nil {
@@ -63,12 +71,53 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return jsonResponse(resp.Status, resp.Body)
 	}
 
-	// Initialize repository for routes that need it
-	if err := initRepo(ctx); err != nil {
+	// Initialize services for routes that need them
+	if err := initServices(ctx); err != nil {
 		return serverError(fmt.Errorf("failed to initialize: %w", err))
 	}
 
-	// POST /register
+	// POST /owners - create new owner
+	if method == http.MethodPost && route == "/owners" {
+		resp, reqErr := handlers.CreateOwner(ctx, request, repo, logger)
+		if reqErr != nil {
+			return clientError(reqErr)
+		}
+		return jsonResponse(resp.Status, resp.Body)
+	}
+
+	// POST /owners/{ownerId}/recover - recover API key
+	if method == http.MethodPost && strings.HasPrefix(route, "/owners/") && strings.HasSuffix(route, "/recover") {
+		ownerID := extractOwnerIDFromPath(route, "/owners/", "/recover")
+		if ownerID == "" {
+			return clientError(&response.RequestError{
+				Status:      http.StatusBadRequest,
+				Description: "invalid owner path",
+			})
+		}
+		resp, reqErr := handlers.RecoverKey(ctx, request, ownerID, repo, emailSvc, logger)
+		if reqErr != nil {
+			return clientError(reqErr)
+		}
+		return jsonResponse(resp.Status, resp.Body)
+	}
+
+	// POST /owners/{ownerId}/rotate - rotate API key
+	if method == http.MethodPost && strings.HasPrefix(route, "/owners/") && strings.HasSuffix(route, "/rotate") {
+		ownerID := extractOwnerIDFromPath(route, "/owners/", "/rotate")
+		if ownerID == "" {
+			return clientError(&response.RequestError{
+				Status:      http.StatusBadRequest,
+				Description: "invalid owner path",
+			})
+		}
+		resp, reqErr := handlers.RotateKey(ctx, request, ownerID, repo, logger)
+		if reqErr != nil {
+			return clientError(reqErr)
+		}
+		return jsonResponse(resp.Status, resp.Body)
+	}
+
+	// POST /register - register IP (requires auth)
 	if method == http.MethodPost && route == "/register" {
 		resp, reqErr := handlers.Register(ctx, request, repo, logger)
 		if reqErr != nil {
@@ -77,7 +126,7 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return jsonResponse(resp.Status, resp.Body)
 	}
 
-	// GET /lookup/{ownerId}/{location}
+	// GET /lookup/{ownerId}/{location} - lookup IP (requires auth)
 	if method == http.MethodGet && strings.HasPrefix(route, "/lookup/") {
 		resp, reqErr := handlers.Lookup(ctx, request, repo, logger)
 		if reqErr != nil {
@@ -91,6 +140,13 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		Status:      http.StatusNotFound,
 		Description: fmt.Sprintf("Resource not found: %s", route),
 	})
+}
+
+// extractOwnerIDFromPath extracts the owner ID from paths like /owners/{ownerId}/action
+func extractOwnerIDFromPath(path, prefix, suffix string) string {
+	path = strings.TrimPrefix(path, prefix)
+	path = strings.TrimSuffix(path, suffix)
+	return path
 }
 
 func jsonResponse(status int, body any) (events.APIGatewayProxyResponse, error) {

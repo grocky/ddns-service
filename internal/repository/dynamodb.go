@@ -12,12 +12,16 @@ import (
 	"github.com/grocky/ddns-service/internal/domain"
 )
 
-const tableName = "DdnsServiceIpMapping"
+const (
+	mappingsTableName = "DdnsServiceIpMapping"
+	ownersTableName   = "DdnsServiceOwners"
+)
 
 // DynamoDBClient defines the interface for DynamoDB operations we use.
 type DynamoDBClient interface {
 	PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+	UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
 }
 
 // DynamoDBRepository implements Repository using DynamoDB.
@@ -43,7 +47,7 @@ func (r *DynamoDBRepository) Put(ctx context.Context, mapping domain.IPMapping) 
 	}
 
 	input := &dynamodb.PutItemInput{
-		TableName: aws.String(tableName),
+		TableName: aws.String(mappingsTableName),
 		Item:      item,
 	}
 
@@ -68,7 +72,7 @@ func (r *DynamoDBRepository) Put(ctx context.Context, mapping domain.IPMapping) 
 // Get retrieves an IP mapping from DynamoDB.
 func (r *DynamoDBRepository) Get(ctx context.Context, ownerID, location string) (*domain.IPMapping, error) {
 	input := &dynamodb.GetItemInput{
-		TableName: aws.String(tableName),
+		TableName: aws.String(mappingsTableName),
 		Key: map[string]types.AttributeValue{
 			"OwnerId":      &types.AttributeValueMemberS{Value: ownerID},
 			"LocationName": &types.AttributeValueMemberS{Value: location},
@@ -98,10 +102,90 @@ func (r *DynamoDBRepository) Get(ctx context.Context, ownerID, location string) 
 	return &mapping, nil
 }
 
+// CreateOwner creates a new owner in DynamoDB.
+// Uses a conditional write to fail if the owner already exists.
+func (r *DynamoDBRepository) CreateOwner(ctx context.Context, owner domain.Owner) error {
+	item, err := attributevalue.MarshalMap(owner)
+	if err != nil {
+		r.logger.Error("failed to marshal owner", "error", err)
+		return err
+	}
+
+	input := &dynamodb.PutItemInput{
+		TableName:           aws.String(ownersTableName),
+		Item:                item,
+		ConditionExpression: aws.String("attribute_not_exists(OwnerId)"),
+	}
+
+	_, err = r.client.PutItem(ctx, input)
+	if err != nil {
+		var condErr *types.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return domain.ErrOwnerExists
+		}
+		r.logger.Error("failed to create owner", "error", err, "ownerId", owner.OwnerID)
+		return err
+	}
+
+	r.logger.Info("owner created", "ownerId", owner.OwnerID)
+	return nil
+}
+
+// GetOwner retrieves an owner from DynamoDB.
+func (r *DynamoDBRepository) GetOwner(ctx context.Context, ownerID string) (*domain.Owner, error) {
+	input := &dynamodb.GetItemInput{
+		TableName: aws.String(ownersTableName),
+		Key: map[string]types.AttributeValue{
+			"OwnerId": &types.AttributeValueMemberS{Value: ownerID},
+		},
+	}
+
+	result, err := r.client.GetItem(ctx, input)
+	if err != nil {
+		r.logger.Error("failed to get owner", "error", err, "ownerId", ownerID)
+		return nil, err
+	}
+
+	if result.Item == nil {
+		return nil, domain.ErrOwnerNotFound
+	}
+
+	var owner domain.Owner
+	if err := attributevalue.UnmarshalMap(result.Item, &owner); err != nil {
+		r.logger.Error("failed to unmarshal owner", "error", err)
+		return nil, err
+	}
+
+	return &owner, nil
+}
+
+// UpdateOwnerKey updates the API key hash for an owner.
+func (r *DynamoDBRepository) UpdateOwnerKey(ctx context.Context, ownerID, newKeyHash string) error {
+	input := &dynamodb.UpdateItemInput{
+		TableName: aws.String(ownersTableName),
+		Key: map[string]types.AttributeValue{
+			"OwnerId": &types.AttributeValueMemberS{Value: ownerID},
+		},
+		UpdateExpression: aws.String("SET ApiKeyHash = :hash"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":hash": &types.AttributeValueMemberS{Value: newKeyHash},
+		},
+		ConditionExpression: aws.String("attribute_exists(OwnerId)"),
+	}
+
+	_, err := r.client.UpdateItem(ctx, input)
+	if err != nil {
+		var condErr *types.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return domain.ErrOwnerNotFound
+		}
+		r.logger.Error("failed to update owner key", "error", err, "ownerId", ownerID)
+		return err
+	}
+
+	r.logger.Info("owner key updated", "ownerId", ownerID)
+	return nil
+}
+
 // Ensure DynamoDBRepository implements Repository.
 var _ Repository = (*DynamoDBRepository)(nil)
-
-// IsMappingNotFound checks if an error is a mapping not found error.
-func IsMappingNotFound(err error) bool {
-	return errors.Is(err, domain.ErrMappingNotFound)
-}

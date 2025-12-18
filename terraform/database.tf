@@ -1,5 +1,5 @@
 # =============================================================================
-# DynamoDB Table
+# DynamoDB Tables
 # =============================================================================
 
 resource "aws_dynamodb_table" "ip_mappings" {
@@ -25,6 +25,23 @@ resource "aws_dynamodb_table" "ip_mappings" {
 
   tags = {
     Name        = "DdnsServiceIpMapping"
+    Environment = var.environment
+    Application = "ddns-service"
+  }
+}
+
+resource "aws_dynamodb_table" "owners" {
+  name         = "DdnsServiceOwners"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "OwnerId"
+
+  attribute {
+    name = "OwnerId"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "DdnsServiceOwners"
     Environment = var.environment
     Application = "ddns-service"
   }

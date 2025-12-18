@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/grocky/ddns-service/internal/auth"
 	"github.com/grocky/ddns-service/internal/domain"
 	"github.com/grocky/ddns-service/internal/repository"
 	"github.com/grocky/ddns-service/internal/response"
 )
 
 // Register handles IP registration requests.
+// Requires authentication via API key.
 func Register(
 	ctx context.Context,
 	request events.APIGatewayProxyRequest,
@@ -23,7 +25,7 @@ func Register(
 	logger.Info("handler started", "handler", "Register")
 	defer logger.Info("handler completed", "handler", "Register")
 
-	// Parse request body
+	// Parse request body first to get ownerId for authentication
 	var req domain.RegisterRequest
 	if err := json.Unmarshal([]byte(request.Body), &req); err != nil {
 		logger.Warn("invalid request body", "error", err)
@@ -40,6 +42,12 @@ func Register(
 			Status:      http.StatusBadRequest,
 			Description: err.Error(),
 		}
+	}
+
+	// Authenticate - verify API key matches the ownerId in the request
+	_, authErr := auth.Authenticate(ctx, request, req.OwnerID, repo, logger)
+	if authErr != nil {
+		return response.MappingResponse{}, authErr
 	}
 
 	// Determine IP address
