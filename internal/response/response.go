@@ -2,7 +2,7 @@ package response
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 )
 
 // ClientIPResponse represents a successful response containing the client's IP.
@@ -34,11 +34,11 @@ func (e *RequestError) Error() string {
 
 // BuildErrorJSON marshals an error description to JSON.
 // If marshaling fails, it logs the error and returns a fallback message.
-func BuildErrorJSON(description string, logger *log.Logger) string {
+func BuildErrorJSON(description string, logger *slog.Logger) string {
 	body := ErrorBody{Description: description}
 	js, err := json.Marshal(body)
 	if err != nil {
-		logger.Printf("failed to marshal error response: %v", err)
+		logger.Error("failed to marshal error response", "error", err)
 		return `{"description":"internal server error"}`
 	}
 	return string(js)

@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
@@ -13,12 +13,16 @@ import (
 	"github.com/grocky/ddns-service/internal/response"
 )
 
-var logger = log.New(os.Stdout, "ddns-service: ", log.LstdFlags|log.Lshortfile)
+var logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	Level: slog.LevelInfo,
+}))
 
 // Handler handles API Gateway proxy requests.
 func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	method := request.HTTPMethod
 	route := request.Path
+
+	logger.Info("request received", "method", method, "route", route)
 
 	if method == http.MethodGet && route == "/public-ip" {
 		resp, reqErr := handlers.GetPublicIP(request, logger)
@@ -37,6 +41,7 @@ func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, nil
 	}
 
+	logger.Warn("resource not found", "route", route)
 	return clientError(&response.RequestError{
 		Status:      http.StatusNotFound,
 		Description: fmt.Sprintf("Resource not found: %s", route),
@@ -44,7 +49,7 @@ func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 }
 
 func serverError(err error) (events.APIGatewayProxyResponse, error) {
-	logger.Printf("server error: %v", err)
+	logger.Error("server error", "error", err)
 
 	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusInternalServerError,
@@ -53,6 +58,8 @@ func serverError(err error) (events.APIGatewayProxyResponse, error) {
 }
 
 func clientError(reqErr *response.RequestError) (events.APIGatewayProxyResponse, error) {
+	logger.Debug("client error", "status", reqErr.Status, "description", reqErr.Description)
+
 	return events.APIGatewayProxyResponse{
 		StatusCode: reqErr.Status,
 		Body:       response.BuildErrorJSON(reqErr.Error(), logger),
