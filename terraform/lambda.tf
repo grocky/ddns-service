@@ -60,11 +60,11 @@ resource "aws_iam_role_policy" "dynamodb" {
 # =============================================================================
 
 resource "aws_cloudwatch_log_group" "lambda" {
-  name              = "/aws/lambda/ddns-service-${var.environment}"
+  name              = "/aws/lambda/ddns-service"
   retention_in_days = 14
 
   tags = {
-    Name        = "ddns-service-logs-${var.environment}"
+    Name        = "ddns-service-logs"
     Environment = var.environment
     Application = "ddns-service"
   }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -22,22 +23,28 @@ var (
 	logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
-	repo repository.Repository
+	repo     repository.Repository
+	initOnce sync.Once
+	initErr  error
 )
 
-func init() {
-	ctx := context.Background()
+func initRepo(ctx context.Context) error {
+	initOnce.Do(func() {
+		logger.Info("initializing repository")
 
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		logger.Error("failed to load AWS config", "error", err)
-		panic(err)
-	}
+		cfg, err := config.LoadDefaultConfig(ctx)
+		if err != nil {
+			logger.Error("failed to load AWS config", "error", err)
+			initErr = err
+			return
+		}
 
-	client := dynamodb.NewFromConfig(cfg)
-	repo = repository.NewDynamoDBRepository(client, logger)
+		client := dynamodb.NewFromConfig(cfg)
+		repo = repository.NewDynamoDBRepository(client, logger)
 
-	logger.Info("lambda initialized")
+		logger.Info("repository initialized")
+	})
+	return initErr
 }
 
 // Handler handles API Gateway proxy requests.
@@ -47,13 +54,18 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	logger.Info("request received", "method", method, "route", route)
 
-	// GET /public-ip
+	// GET /public-ip - doesn't need DynamoDB
 	if method == http.MethodGet && route == "/public-ip" {
 		resp, reqErr := handlers.GetPublicIP(request, logger)
 		if reqErr != nil {
 			return clientError(reqErr)
 		}
 		return jsonResponse(resp.Status, resp.Body)
+	}
+
+	// Initialize repository for routes that need it
+	if err := initRepo(ctx); err != nil {
+		return serverError(fmt.Errorf("failed to initialize: %w", err))
 	}
 
 	// POST /register

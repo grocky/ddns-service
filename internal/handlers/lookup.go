@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -12,6 +13,7 @@ import (
 )
 
 // Lookup handles IP lookup requests.
+// Path format: /lookup/{ownerId}/{location}
 func Lookup(
 	ctx context.Context,
 	request events.APIGatewayProxyRequest,
@@ -21,12 +23,19 @@ func Lookup(
 	logger.Info("handler started", "handler", "Lookup")
 	defer logger.Info("handler completed", "handler", "Lookup")
 
-	// Extract path parameters
-	ownerID := request.PathParameters["ownerId"]
-	location := request.PathParameters["location"]
+	// Parse path: /lookup/{ownerId}/{location}
+	// Remove leading slash and split
+	path := strings.TrimPrefix(request.Path, "/")
+	parts := strings.Split(path, "/")
+
+	var ownerID, location string
+	if len(parts) >= 3 {
+		ownerID = parts[1]
+		location = parts[2]
+	}
 
 	if ownerID == "" || location == "" {
-		logger.Warn("missing path parameters", "ownerId", ownerID, "location", location)
+		logger.Warn("missing path parameters", "ownerId", ownerID, "location", location, "path", request.Path)
 		return response.MappingResponse{}, &response.RequestError{
 			Status:      http.StatusBadRequest,
 			Description: "ownerId and location are required",
