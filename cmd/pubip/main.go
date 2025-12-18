@@ -7,7 +7,7 @@ import (
 	"os"
 	"runtime/pprof"
 
-	"github.com/grocky/ddns-service/pubip"
+	"github.com/grocky/ddns-service/pkg/pubip"
 )
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
@@ -26,6 +26,7 @@ func main() {
 	ip, err := pubip.IP()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s", err.Error())
+		os.Exit(1)
 	}
 	fmt.Println(ip)
 }

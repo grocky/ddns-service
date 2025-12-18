@@ -4,22 +4,25 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"gotest.tools/assert"
 )
 
+// RoundTripFunc is a function type that implements http.RoundTripper.
 type RoundTripFunc func(req *http.Request) (*http.Response, error)
 
 func (f RoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
+// NewTestClient creates a new HTTP client with a custom transport for testing.
 func NewTestClient(fn RoundTripFunc) *http.Client {
 	return &http.Client{
-		Transport: RoundTripFunc(fn),
+		Transport: fn,
 	}
 }
 
@@ -41,8 +44,8 @@ func TestRequestExternalIP(t *testing.T) {
 			assert.Equal(t, req.Header.Get("User-Agent"), "grocky: pubip")
 
 			return &http.Response{
-				StatusCode: 200,
-				Body:       ioutil.NopCloser(bytes.NewBufferString(tt.response)),
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(tt.response)),
 				Header:     make(http.Header),
 			}, nil
 		})
@@ -65,5 +68,8 @@ func TestErrorRequestExternalIP(t *testing.T) {
 	a := authority{client, "http://example.com"}
 	body, err := a.requestExternalIP()
 	assert.Assert(t, body == "")
-	assert.Equal(t, "Get http://example.com: some client error happened", err.Error())
+	// Check that error message contains the expected parts (URL format may vary by Go version)
+	assert.Assert(t, err != nil)
+	assert.Assert(t, strings.Contains(err.Error(), "http://example.com"))
+	assert.Assert(t, strings.Contains(err.Error(), "some client error happened"))
 }

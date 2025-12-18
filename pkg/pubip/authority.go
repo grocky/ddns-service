@@ -2,19 +2,19 @@ package pubip
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 )
 
-// Authority Used to engage with public ip authorities.
+// authority is used to query external public IP services.
 type authority struct {
 	httpClient *http.Client
 	domain     string
 }
 
-// NewAuthority Creates a new Authority
+// newAuthority creates a new authority with the given domain.
 func newAuthority(domain string) *authority {
 	return &authority{
 		domain: domain,
@@ -25,9 +25,9 @@ func newAuthority(domain string) *authority {
 }
 
 func (a *authority) requestExternalIP() (string, error) {
-	req, err := http.NewRequest("GET", a.domain, nil)
+	req, err := http.NewRequest(http.MethodGet, a.domain, nil)
 	if err != nil {
-		return "", fmt.Errorf("Unable to create the request %s", err.Error())
+		return "", fmt.Errorf("unable to create request: %w", err)
 	}
 	req.Header.Set("User-Agent", "grocky: pubip")
 
@@ -35,11 +35,11 @@ func (a *authority) requestExternalIP() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
+
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("Unable to read body: %s", err.Error())
+		return "", fmt.Errorf("unable to read body: %w", err)
 	}
 
 	return strings.TrimSpace(string(b)), nil

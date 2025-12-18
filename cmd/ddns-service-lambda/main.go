@@ -9,72 +9,56 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/grocky/ddns-service/cmd/ddns-service-lambda/handlers"
+	"github.com/grocky/ddns-service/internal/handlers"
+	"github.com/grocky/ddns-service/internal/response"
 )
 
-var logger = log.New(os.Stdout, "ddns-service : ", log.LstdFlags|log.Llongfile)
+var logger = log.New(os.Stdout, "ddns-service: ", log.LstdFlags|log.Lshortfile)
 
-// Handler handle the API gateway request
+// Handler handles API Gateway proxy requests.
 func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	method := request.HTTPMethod
 	route := request.Path
 
-	var response handlers.ClientIpResponse
-	var requestError *handlers.RequestError = &handlers.RequestError{
-		Status:      http.StatusNotFound,
-		Description: fmt.Sprintf("Resource not found: %s", route),
-	}
-
 	if method == http.MethodGet && route == "/public-ip" {
-		response, requestError = handlers.GetPublicIPHandler(request, *logger)
-		if requestError != nil {
-			return clientError(requestError)
+		resp, reqErr := handlers.GetPublicIP(request, logger)
+		if reqErr != nil {
+			return clientError(reqErr)
 		}
 
-		js, err := json.Marshal(response.Body)
+		js, err := json.Marshal(resp.Body)
 		if err != nil {
 			return serverError(err)
 		}
 
 		return events.APIGatewayProxyResponse{
-			StatusCode: response.Status,
+			StatusCode: resp.Status,
 			Body:       string(js),
 		}, nil
 	}
 
-	return clientError(requestError)
+	return clientError(&response.RequestError{
+		Status:      http.StatusNotFound,
+		Description: fmt.Sprintf("Resource not found: %s", route),
+	})
 }
 
 func serverError(err error) (events.APIGatewayProxyResponse, error) {
-	logger.Println(err.Error())
+	logger.Printf("server error: %v", err)
 
 	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusInternalServerError,
-		Body:       buildErrorResponse(err.Error()),
+		Body:       response.BuildErrorJSON(err.Error(), logger),
 	}, nil
 }
 
-// Similarly add a helper for send responses relating to client errors.
-func clientError(requestError *handlers.RequestError) (events.APIGatewayProxyResponse, error) {
+func clientError(reqErr *response.RequestError) (events.APIGatewayProxyResponse, error) {
 	return events.APIGatewayProxyResponse{
-		StatusCode: requestError.Status,
-		Body:       buildErrorResponse(requestError.Error()),
+		StatusCode: reqErr.Status,
+		Body:       response.BuildErrorJSON(reqErr.Error(), logger),
 	}, nil
-}
-
-func buildErrorResponse(description string) string {
-	response := handlers.ErrorResponse{Description: description}
-	js, err := json.Marshal(response)
-
-	if err != nil {
-		logger.Println(response)
-		return "Unable to marshl response."
-	}
-
-	return string(js)
 }
 
 func main() {
-	fmt.Print(os.Getenv("_LAMBDA_SERVER_PORT"))
 	lambda.Start(Handler)
 }
