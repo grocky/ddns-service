@@ -1,85 +1,112 @@
-PROJECT_NAME=ddns-service
-APP_VERSION := $(shell git describe --always --long --dirty)
-
-BUCKET_NAME=grocky-services
-APP_ARCHIVE=$(PROJECT_NAME)-$(APP_VERSION).zip
-
-BUILD_DIR=bin
-BUILD_BIN=${BUILD_DIR}/${PROJECT_NAME}_linux_${APP_VERSION}
-
-LOCAL_OS := $(shell uname | tr '[:upper:]' '[:lower:]')
-
 GREEN  := $(shell tput -Txterm setaf 2)
-YELLOW := $(shell tput -Txterm setaf 3)
-BLUE  := $(shell tput -Txterm setaf 4)
-WHITE  := $(shell tput -Txterm setaf 7)
-RESET  := $(shell tput -Txterm sgr0)
+NC     := $(shell tput -Txterm sgr0)
 
-##### Targets ######
-.PHONY: help
-.DEFAULT_GOAL := help
+PROJECT_NAME := ddns-service
+APP_VERSION  := $(shell git describe --always --long --dirty)
 
-help: ## print this help message
-	@awk -F ':|##' '/^[^\t].+?:.*?##/ { printf "${BLUE}%-20s${RESET}%s\n", $$1, $$NF }' $(MAKEFILE_LIST) | \
-        sort
+BUILD_DIR    := bin
+BUCKET_NAME  := grocky-services
+APP_ARCHIVE  := $(PROJECT_NAME)-$(APP_VERSION).zip
 
-### Terraform ###
+# Source file dependencies
+LAMBDA_SOURCES := $(shell find cmd/ddns-service-lambda internal pkg -name "*.go")
+PUBIP_SOURCES  := $(shell find cmd/pubip pkg -name "*.go")
 
-.PHONY: plan
-tf-plan: ## terraform plan
-	cd terraform; terraform plan -var 'app_version=$(APP_VERSION)'
+help: ## Print this help message
+	@awk -F ':|##' '/^[^\t].+?:.*?##/ { printf "${GREEN}%-20s${NC}%s\n", $$1, $$NF }' $(MAKEFILE_LIST) | \
+		sort
 
-.PHONY: init
-tf-init: ## initialize terraform when adding new integrations
-	cd terraform; terraform init
+# =============================================================================
+# Build
+# =============================================================================
 
-### Application ####
-clean: ## clean previous builds
-	@rm -rf $(BUILD_DIR)
-
-_s3-bucket: $(BUILD_DIR)/s3-bucket
-$(BUILD_DIR)/s3-bucket:
-	aws s3api create-bucket --region=us-east-1 --bucket=$(BUCKET_NAME)
-	touch $(BUILD_DIR)/s3-bucket
-
-_ensure-package: $(BUILD_DIR)
 $(BUILD_DIR):
 	@mkdir -p $@
 
-publish: package _s3-bucket _upload-archive ## package and upload archive
-_upload-archive: $(BUILD_DIR)/publish-$(APP_VERSION)
-$(BUILD_DIR)/publish-$(APP_VERSION):
-	@aws s3 cp $(BUILD_DIR)/$(APP_ARCHIVE) s3://$(BUCKET_NAME)/$(APP_ARCHIVE)
+.PHONY=clean
+clean: ## Clean build artifacts
+	rm -rf $(BUILD_DIR)
 
-.PHONY: deploy
-deploy: publish ## publish and update lambda function
+# --- Lambda ---
+
+$(BUILD_DIR)/$(PROJECT_NAME)-lambda: $(LAMBDA_SOURCES) | $(BUILD_DIR)
+	GOOS=linux GOARCH=amd64 go build -o $@ ./cmd/ddns-service-lambda
+
+.PHONY=build-lambda
+build-lambda: $(BUILD_DIR)/$(PROJECT_NAME)-lambda ## Build the Lambda binary (linux/amd64)
+
+# --- pubip CLI ---
+
+$(BUILD_DIR)/pubip: $(PUBIP_SOURCES) | $(BUILD_DIR)
+	go build -o $@ ./cmd/pubip
+
+.PHONY=build-pubip
+build-pubip: $(BUILD_DIR)/pubip ## Build the pubip CLI
+
+$(BUILD_DIR)/pubip-debug: $(PUBIP_SOURCES) | $(BUILD_DIR)
+	go build -tags=debug -o $@ ./cmd/pubip
+
+.PHONY=build-pubip-debug
+build-pubip-debug: $(BUILD_DIR)/pubip-debug ## Build the pubip CLI with debug profiling
+
+.PHONY=build
+build: build-lambda build-pubip ## Build all binaries
+
+# =============================================================================
+# Test
+# =============================================================================
+
+.PHONY=test
+test: ## Run all tests
+	go test ./...
+
+.PHONY=test-endpoint
+test-endpoint: ## Test the deployed endpoint with a GET request
+	curl -s https://ddns.rockygray.com/public-ip | jq .
+
+# =============================================================================
+# Package & Deploy
+# =============================================================================
+
+$(BUILD_DIR)/$(APP_ARCHIVE): $(BUILD_DIR)/$(PROJECT_NAME)-lambda
+	zip -j $@ $<
+
+.PHONY=package
+package: $(BUILD_DIR)/$(APP_ARCHIVE) ## Package Lambda binary into a zip archive
+
+$(BUILD_DIR)/.s3-bucket:
+	aws s3api create-bucket --region=us-east-1 --bucket=$(BUCKET_NAME)
+	@touch $@
+
+$(BUILD_DIR)/.published-$(APP_VERSION): $(BUILD_DIR)/$(APP_ARCHIVE) $(BUILD_DIR)/.s3-bucket
+	aws s3 cp $< s3://$(BUCKET_NAME)/$(APP_ARCHIVE)
+	@touch $@
+
+.PHONY=publish
+publish: $(BUILD_DIR)/.published-$(APP_VERSION) ## Upload Lambda archive to S3
+
+.PHONY=deploy
+deploy: publish ## Publish and deploy Lambda via Terraform
 	cd terraform; terraform apply -var 'app_version=$(APP_VERSION)' -auto-approve
 
-invoke: ## invoke the lambda functio with test-payload.json
-	aws lambda invoke --region=us-east-1 --function-name=${PROJECT_NAME} --payload file://test-payload.json logs/out.txt
+.PHONY=invoke
+invoke: ## Invoke the Lambda with test-payload.json
+	@mkdir -p logs
+	aws lambda invoke --region=us-east-1 --function-name=$(PROJECT_NAME) --payload file://test-payload.json logs/out.txt
+	@cat logs/out.txt | jq .
 
-test: ## test the with a simple GET request
-	http https://ddns.rockygray.com/public-ip
+# =============================================================================
+# Terraform
+# =============================================================================
 
-### Go Impl ###
+.PHONY=tf-init
+tf-init: ## Initialize Terraform
+	cd terraform; terraform init
 
-install: ## install go dependencies
-	go get github.com/aws/aws-lambda-go/events
-	go get github.com/aws/aws-lambda-go/lambda
-	go get github.com/stretchr/testify/assert
+.PHONY=tf-plan
+tf-plan: ## Plan Terraform changes
+	cd terraform; terraform plan -var 'app_version=$(APP_VERSION)'
 
-.PHONY: build-local ${BUILD_DIR}/${PROJECT_NAME}_${LOCAL_OS}
-build-local: ## build a local binary
-build-local: ${BUILD_DIR}/${PROJECT_NAME}_${LOCAL_OS}_${APP_VERSION}
-${BUILD_DIR}/${PROJECT_NAME}_${LOCAL_OS}_${APP_VERSION}:
-	env GOOS=${LOCAL_OS} GOARCH=amd64 go build -o ${BUILD_DIR}/${PROJECT_NAME}_${LOCAL_OS} main.go
-
-.PHONY: build ${BUILD_DIR}/${PROJECT_NAME}_linux
-build: ${BUILD_BIN} ## build a linux binary
-${BUILD_BIN}:
-	env GOOS=linux GOARCH=amd64 go build -o $@ cmd/ddns-service-lambda/main.go
-
-package: ## Zip up the build binary
-package: _ensure-package $(BUILD_DIR)/$(APP_ARCHIVE)
-$(BUILD_DIR)/$(APP_ARCHIVE):
-	zip -j $@ ${BUILD_BIN}
+.PHONY=tf-apply
+tf-apply: ## Apply Terraform changes
+	cd terraform; terraform apply -var 'app_version=$(APP_VERSION)'
