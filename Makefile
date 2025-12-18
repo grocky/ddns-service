@@ -2,94 +2,72 @@ GREEN  := $(shell tput -Txterm setaf 2)
 NC     := $(shell tput -Txterm sgr0)
 
 PROJECT_NAME := ddns-service
-APP_VERSION  := $(shell git describe --always --long --dirty)
 
-BUILD_DIR    := bin
-BUCKET_NAME  := grocky-services
-APP_ARCHIVE  := $(PROJECT_NAME)-$(APP_VERSION).zip
+.DEFAULT_GOAL := help
 
 # Source file dependencies
 LAMBDA_SOURCES := $(shell find cmd/ddns-service-lambda internal pkg -name "*.go")
 PUBIP_SOURCES  := $(shell find cmd/pubip pkg -name "*.go")
 
 help: ## Print this help message
-	@awk -F ':|##' '/^[^\t].+?:.*?##/ { printf "${GREEN}%-20s${NC}%s\n", $$1, $$NF }' $(MAKEFILE_LIST) | \
-		sort
+	@awk -F ':|##' '/^[^\t].+?:.*?##/ { printf "${GREEN}%-20s${NC}%s\n", $$1, $$NF }' $(MAKEFILE_LIST) | sort
 
 # =============================================================================
 # Build
 # =============================================================================
 
-$(BUILD_DIR):
-	@mkdir -p $@
-
-.PHONY=clean
+.PHONY: clean
 clean: ## Clean build artifacts
-	rm -rf $(BUILD_DIR)
+	rm -rf bin scripts/dist
 
 # --- Lambda ---
 
-$(BUILD_DIR)/$(PROJECT_NAME)-lambda: $(LAMBDA_SOURCES) | $(BUILD_DIR)
-	GOOS=linux GOARCH=amd64 go build -o $@ ./cmd/ddns-service-lambda
+scripts/dist/ddns-service.zip: $(LAMBDA_SOURCES)
+	./scripts/build-lambda.sh
 
-.PHONY=build-lambda
-build-lambda: $(BUILD_DIR)/$(PROJECT_NAME)-lambda ## Build the Lambda binary (linux/amd64)
+.PHONY: build-lambda
+build-lambda: scripts/dist/ddns-service.zip ## Build the Lambda deployment package
 
 # --- pubip CLI ---
 
-$(BUILD_DIR)/pubip: $(PUBIP_SOURCES) | $(BUILD_DIR)
+bin/pubip: $(PUBIP_SOURCES)
+	@mkdir -p bin
 	go build -o $@ ./cmd/pubip
 
-.PHONY=build-pubip
-build-pubip: $(BUILD_DIR)/pubip ## Build the pubip CLI
+.PHONY: build-pubip
+build-pubip: bin/pubip ## Build the pubip CLI
 
-$(BUILD_DIR)/pubip-debug: $(PUBIP_SOURCES) | $(BUILD_DIR)
+bin/pubip-debug: $(PUBIP_SOURCES)
+	@mkdir -p bin
 	go build -tags=debug -o $@ ./cmd/pubip
 
-.PHONY=build-pubip-debug
-build-pubip-debug: $(BUILD_DIR)/pubip-debug ## Build the pubip CLI with debug profiling
+.PHONY: build-pubip-debug
+build-pubip-debug: bin/pubip-debug ## Build the pubip CLI with debug profiling
 
-.PHONY=build
-build: build-lambda build-pubip ## Build all binaries
+.PHONY: build
+build: build-lambda build-pubip ## Build all artifacts
 
 # =============================================================================
 # Test
 # =============================================================================
 
-.PHONY=test
+.PHONY: test
 test: ## Run all tests
 	go test ./...
 
-.PHONY=test-endpoint
+.PHONY: test-endpoint
 test-endpoint: ## Test the deployed endpoint with a GET request
 	curl -s https://ddns.rockygray.com/public-ip | jq .
 
 # =============================================================================
-# Package & Deploy
+# Deploy
 # =============================================================================
 
-$(BUILD_DIR)/$(APP_ARCHIVE): $(BUILD_DIR)/$(PROJECT_NAME)-lambda
-	zip -j $@ $<
+.PHONY: deploy
+deploy: build-lambda ## Build and deploy Lambda via Terraform
+	cd terraform && terraform apply -auto-approve
 
-.PHONY=package
-package: $(BUILD_DIR)/$(APP_ARCHIVE) ## Package Lambda binary into a zip archive
-
-$(BUILD_DIR)/.s3-bucket:
-	aws s3api create-bucket --region=us-east-1 --bucket=$(BUCKET_NAME)
-	@touch $@
-
-$(BUILD_DIR)/.published-$(APP_VERSION): $(BUILD_DIR)/$(APP_ARCHIVE) $(BUILD_DIR)/.s3-bucket
-	aws s3 cp $< s3://$(BUCKET_NAME)/$(APP_ARCHIVE)
-	@touch $@
-
-.PHONY=publish
-publish: $(BUILD_DIR)/.published-$(APP_VERSION) ## Upload Lambda archive to S3
-
-.PHONY=deploy
-deploy: publish ## Publish and deploy Lambda via Terraform
-	cd terraform; terraform apply -var 'app_version=$(APP_VERSION)' -auto-approve
-
-.PHONY=invoke
+.PHONY: invoke
 invoke: ## Invoke the Lambda with test-payload.json
 	@mkdir -p logs
 	aws lambda invoke --region=us-east-1 --function-name=$(PROJECT_NAME) --payload file://test-payload.json logs/out.txt
@@ -99,14 +77,14 @@ invoke: ## Invoke the Lambda with test-payload.json
 # Terraform
 # =============================================================================
 
-.PHONY=tf-init
+.PHONY: tf-init
 tf-init: ## Initialize Terraform
-	cd terraform; terraform init
+	cd terraform && terraform init
 
-.PHONY=tf-plan
-tf-plan: ## Plan Terraform changes
-	cd terraform; terraform plan -var 'app_version=$(APP_VERSION)'
+.PHONY: tf-plan
+tf-plan: build-lambda ## Plan Terraform changes
+	cd terraform && terraform plan
 
-.PHONY=tf-apply
-tf-apply: ## Apply Terraform changes
-	cd terraform; terraform apply -var 'app_version=$(APP_VERSION)'
+.PHONY: tf-apply
+tf-apply: build-lambda ## Apply Terraform changes
+	cd terraform && terraform apply

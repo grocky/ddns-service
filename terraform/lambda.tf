@@ -1,50 +1,118 @@
-variable "app_version" { }
+# =============================================================================
+# IAM Role for Lambda
+# =============================================================================
 
-data "template_file" "ddns-service-lambda-assume-role-policy" {
-  template = "${file("${path.module}/lambda-assume-role-policy.json")}"
+resource "aws_iam_role" "lambda" {
+  name = "ddns-service-lambda-${var.environment}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "ddns-service-lambda-${var.environment}"
+    Environment = var.environment
+    Application = "ddns-service"
+  }
 }
 
-resource "aws_iam_role" "lambda_exec" {
-  name = "lambda_exec"
-  assume_role_policy = "${data.template_file.ddns-service-lambda-assume-role-policy.rendered}"
+# Basic Lambda execution policy (CloudWatch Logs)
+resource "aws_iam_role_policy_attachment" "lambda_basic" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_lambda_function" "ddns-service" {
+# DynamoDB access policy
+resource "aws_iam_role_policy" "dynamodb" {
+  name = "dynamodb-access"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = aws_dynamodb_table.ip_mappings.arn
+      }
+    ]
+  })
+}
+
+# =============================================================================
+# CloudWatch Log Group
+# =============================================================================
+
+resource "aws_cloudwatch_log_group" "lambda" {
+  name              = "/aws/lambda/ddns-service-${var.environment}"
+  retention_in_days = 14
+
+  tags = {
+    Name        = "ddns-service-logs-${var.environment}"
+    Environment = var.environment
+    Application = "ddns-service"
+  }
+}
+
+# =============================================================================
+# Lambda Function
+# =============================================================================
+
+resource "aws_lambda_function" "ddns_service" {
   function_name = "ddns-service"
+  role          = aws_iam_role.lambda.arn
+  handler       = "bootstrap"
+  runtime       = "provided.al2023"
+  architectures = ["arm64"]
 
-  s3_bucket = "grocky-services"
-  s3_key    = "ddns-service-${var.app_version}.zip"
+  filename         = "${path.module}/../scripts/dist/ddns-service.zip"
+  source_code_hash = filebase64sha256("${path.module}/../scripts/dist/ddns-service.zip")
 
-  handler = "ddns-service_linux_${var.app_version}"
-  runtime = "go1.x"
+  memory_size = 128
+  timeout     = 10
 
-  role = "${aws_iam_role.lambda_exec.arn}"
+  environment {
+    variables = {
+      ENVIRONMENT = var.environment
+    }
+  }
+
+  depends_on = [
+    aws_cloudwatch_log_group.lambda,
+    aws_iam_role_policy_attachment.lambda_basic
+  ]
+
+  tags = {
+    Name        = "ddns-service-${var.environment}"
+    Environment = var.environment
+    Application = "ddns-service"
+  }
 }
 
-data "template_file" "ddns-service-lambda-role-policy" {
-  template = "${file("${path.module}/lambda-role-policy.json")}"
-}
-
-resource "aws_iam_policy" "ddns-service-policy" {
-  name   = "ddns-service-policy"
-  path   = "/"
-  policy = "${data.template_file.ddns-service-lambda-role-policy.rendered}"
-}
-
-resource "aws_iam_policy_attachment" "ddns-service_policy_attachment" {
-  name       = "ddns-service-policy-attachment"
-  roles      = ["${aws_iam_role.lambda_exec.name}"]
-  policy_arn = "${aws_iam_policy.ddns-service-policy.arn}"
-}
+# =============================================================================
+# API Gateway Permission
+# =============================================================================
 
 resource "aws_lambda_permission" "apigw" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.ddns-service.arn}"
+  function_name = aws_lambda_function.ddns_service.function_name
   principal     = "apigateway.amazonaws.com"
-
-  # The /*/* portion grants access from any method on any resource
-  # within the API Gateway "REST API".
-  source_arn = "${aws_api_gateway_deployment.ddns-service.execution_arn}/*/*"
+  source_arn    = "${aws_api_gateway_rest_api.ddns_service.execution_arn}/*/*"
 }
-

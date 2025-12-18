@@ -1,9 +1,12 @@
-resource "aws_dynamodb_table" "ddns-service-table" {
-  name           = "DdnsServiceIpMapping"
-  read_capacity  = 20
-  write_capacity = 20
-  hash_key       = "OwnerId"
-  range_key      = "LocationName"
+# =============================================================================
+# DynamoDB Table
+# =============================================================================
+
+resource "aws_dynamodb_table" "ip_mappings" {
+  name         = "DdnsServiceIpMapping"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "OwnerId"
+  range_key    = "LocationName"
 
   attribute {
     name = "OwnerId"
@@ -17,11 +20,12 @@ resource "aws_dynamodb_table" "ddns-service-table" {
 
   ttl {
     attribute_name = "TimeToExist"
-    enabled = false
+    enabled        = false
   }
 
-  tags {
+  tags = {
     Name        = "DdnsServiceIpMapping"
-    Environment = "production"
+    Environment = var.environment
+    Application = "ddns-service"
   }
 }

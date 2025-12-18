@@ -1,13 +1,39 @@
 terraform {
+  required_version = ">= 1.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+
   backend "s3" {
-    encrypt = true
-    bucket = "grocky-tfstate"
-    dynamodb_table = "tfstate-lock"
-    region = "us-east-1"
-    key = "ddns.rockygray.com/terraform.tfstate"
+    bucket       = "grocky-tfstate"
+    key          = "ddns.rockygray.com/terraform.tfstate"
+    region       = "us-east-1"
+    use_lockfile = true
+    encrypt      = true
   }
 }
 
 provider "aws" {
   region = "us-east-1"
 }
+
+# =============================================================================
+# Variables
+# =============================================================================
+
+variable "environment" {
+  description = "Environment name"
+  type        = string
+  default     = "prod"
+}
+
+# =============================================================================
+# Data Sources
+# =============================================================================
+
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
