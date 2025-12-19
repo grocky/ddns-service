@@ -80,13 +80,18 @@ func Update(
 		}
 	}
 
-	// Generate subdomain (deterministic based on ownerId-location)
-	subdomain := dns.GenerateSubdomain(req.OwnerID, req.Location)
-	fullSubdomain := dns.FullSubdomain(req.OwnerID, req.Location)
-
 	// Check if this is a new mapping or if IP has changed
 	isNew := existing == nil
 	ipChanged := isNew || existing.IP != ip
+
+	// Determine subdomain: use existing custom subdomain or generate hash
+	var subdomain string
+	if existing != nil && existing.Subdomain != "" {
+		subdomain = existing.Subdomain
+	} else {
+		subdomain = dns.GenerateSubdomain(req.OwnerID, req.Location)
+	}
+	fullSubdomain := dns.FormatFQDN(subdomain)
 
 	if !ipChanged {
 		// IP hasn't changed - just return current state
@@ -153,7 +158,10 @@ func Update(
 	// Update IP and timestamps
 	mapping.IP = ip
 	mapping.UpdatedAt = now
-	mapping.Subdomain = subdomain
+	// Only set subdomain for new mappings; preserve existing custom subdomains
+	if isNew {
+		mapping.Subdomain = subdomain
+	}
 
 	// Update rate limit counters
 	ratelimit.UpdateCounters(&mapping, now)

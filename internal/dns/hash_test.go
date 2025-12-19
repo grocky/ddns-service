@@ -59,13 +59,6 @@ func TestGenerateSubdomain_Unique(t *testing.T) {
 	assert.Assert(t, result1 != result3, "different locations should produce different subdomains")
 }
 
-func TestFullSubdomain(t *testing.T) {
-	result := FullSubdomain("my-home-lab", "home")
-	expected := "6abf7de6." + RootDomain
-
-	assert.Equal(t, expected, result)
-}
-
 func TestSubdomainLength(t *testing.T) {
 	// Verify constant matches expected value
 	assert.Equal(t, 8, SubdomainLength)
@@ -74,4 +67,35 @@ func TestSubdomainLength(t *testing.T) {
 func TestRootDomain(t *testing.T) {
 	// Verify root domain is set correctly
 	assert.Equal(t, "grocky.net", RootDomain)
+}
+
+func TestFormatFQDN(t *testing.T) {
+	testCases := []struct {
+		name      string
+		subdomain string
+		expected  string
+	}{
+		{
+			name:      "hash subdomain",
+			subdomain: "6abf7de6",
+			expected:  "6abf7de6.grocky.net",
+		},
+		{
+			name:      "custom subdomain",
+			subdomain: "home",
+			expected:  "home.grocky.net",
+		},
+		{
+			name:      "hyphenated subdomain",
+			subdomain: "my-home-lab",
+			expected:  "my-home-lab.grocky.net",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := FormatFQDN(tc.subdomain)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
 }

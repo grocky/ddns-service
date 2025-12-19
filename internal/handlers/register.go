@@ -77,7 +77,7 @@ func Register(
 
 	// Generate subdomain
 	subdomain := dns.GenerateSubdomain(req.OwnerID, req.Location)
-	fullSubdomain := dns.FullSubdomain(req.OwnerID, req.Location)
+	fullSubdomain := dns.FormatFQDN(subdomain)
 
 	// Create mapping
 	now := time.Now().UTC()

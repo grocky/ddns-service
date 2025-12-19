@@ -21,8 +21,7 @@ func GenerateSubdomain(ownerID, location string) string {
 	return fmt.Sprintf("%x", hash)[:SubdomainLength]
 }
 
-// FullSubdomain returns the complete subdomain including the root domain.
-// Example: "a3f8c2d1.grocky.net"
-func FullSubdomain(ownerID, location string) string {
-	return fmt.Sprintf("%s.%s", GenerateSubdomain(ownerID, location), RootDomain)
+// FormatFQDN formats a subdomain with the root domain.
+func FormatFQDN(subdomain string) string {
+	return fmt.Sprintf("%s.%s", subdomain, RootDomain)
 }

@@ -69,7 +69,12 @@ func Lookup(
 		}
 	}
 
-	fullSubdomain := dns.FullSubdomain(mapping.OwnerID, mapping.LocationName)
+	// Use stored subdomain if set, otherwise generate hash
+	subdomain := mapping.Subdomain
+	if subdomain == "" {
+		subdomain = dns.GenerateSubdomain(mapping.OwnerID, mapping.LocationName)
+	}
+	fullSubdomain := dns.FormatFQDN(subdomain)
 
 	logger.Info("mapping found",
 		"ownerId", mapping.OwnerID,
