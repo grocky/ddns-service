@@ -1,5 +1,5 @@
 resource "aws_route53_zone" "ddns" {
-  name = var.domain_name
+  name = local.domain_name
 
   tags = {
     Name        = "ddns-zone"
@@ -9,11 +9,11 @@ resource "aws_route53_zone" "ddns" {
 }
 
 output "ddns_hosted_zone_id" {
-  description = "The hosted zone ID for the DDNS domain (${var.domain_name})"
+  description = "The hosted zone ID for the DDNS domain"
   value       = aws_route53_zone.ddns.zone_id
 }
 
 output "ddns_nameservers" {
-  description = "The nameservers for ${var.domain_name}"
+  description = "The nameservers"
   value       = aws_route53_zone.ddns.name_servers
 }

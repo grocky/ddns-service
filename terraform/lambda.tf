@@ -75,7 +75,7 @@ resource "aws_iam_role_policy" "ses" {
         Resource = "*"
         Condition = {
           StringEquals = {
-            "ses:FromAddress" = "noreply@rockygray.com"
+            "ses:FromAddress" = "noreply@${local.domain_name}"
           }
         }
       }

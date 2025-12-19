@@ -132,7 +132,7 @@ func TestBuildAPIKeyEmailBody(t *testing.T) {
 	assert.Assert(t, strings.Contains(body, "ddns_sk_abc123"))
 	assert.Assert(t, strings.Contains(body, "Authorization: Bearer"))
 	assert.Assert(t, strings.Contains(body, "IMPORTANT"))
-	assert.Assert(t, strings.Contains(body, "ddns.rockygray.com"))
+	assert.Assert(t, strings.Contains(body, APIEndpoint))
 }
 
 func TestBuildAPIKeyEmailHTML(t *testing.T) {
@@ -144,7 +144,7 @@ func TestBuildAPIKeyEmailHTML(t *testing.T) {
 	assert.Assert(t, strings.Contains(html, "Authorization: Bearer"))
 	assert.Assert(t, strings.Contains(html, "<!DOCTYPE html>"))
 	assert.Assert(t, strings.Contains(html, "</html>"))
-	assert.Assert(t, strings.Contains(html, "ddns.rockygray.com"))
+	assert.Assert(t, strings.Contains(html, APIEndpoint))
 }
 
 func TestSESServiceImplementsInterface(t *testing.T) {

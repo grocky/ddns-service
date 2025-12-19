@@ -13,7 +13,10 @@ import (
 const (
 	// DefaultSenderEmail is the default email address to send from.
 	// This should be verified in SES.
-	DefaultSenderEmail = "noreply@rockygray.com"
+	DefaultSenderEmail = "noreply@grocky.net"
+
+	// APIEndpoint is the base URL for the DDNS API.
+	APIEndpoint = "https://ddns.grocky.net"
 
 	// EmailSubject is the subject line for API key emails.
 	EmailSubject = "Your DDNS Service API Key"
@@ -106,17 +109,17 @@ Use this key in the Authorization header for all API requests:
 Authorization: Bearer %s
 
 Example usage:
-curl -X POST https://ddns.rockygray.com/register \
+curl -X POST %s/update \
   -H "Authorization: Bearer %s" \
   -H "Content-Type: application/json" \
-  -d '{"ownerId":"%s","location":"home","ip":"auto"}'
+  -d '{"ownerId":"%s","location":"home"}'
 
 If you did not request this key, please ignore this email.
 
 ---
 DDNS Service
-https://ddns.rockygray.com
-`, ownerID, apiKey, apiKey, apiKey, ownerID)
+%s
+`, ownerID, apiKey, apiKey, APIEndpoint, apiKey, ownerID, APIEndpoint)
 }
 
 func buildAPIKeyEmailHTML(ownerID, apiKey string) string {
@@ -150,10 +153,10 @@ func buildAPIKeyEmailHTML(ownerID, apiKey string) string {
     <pre>Authorization: Bearer %s</pre>
 
     <h3>Example</h3>
-    <pre>curl -X POST https://ddns.rockygray.com/register \
+    <pre>curl -X POST %s/update \
   -H "Authorization: Bearer %s" \
   -H "Content-Type: application/json" \
-  -d '{"ownerId":"%s","location":"home","ip":"auto"}'</pre>
+  -d '{"ownerId":"%s","location":"home"}'</pre>
 
     <p style="color: #666; font-size: 14px; margin-top: 40px;">
       If you did not request this key, please ignore this email.
@@ -162,11 +165,11 @@ func buildAPIKeyEmailHTML(ownerID, apiKey string) string {
     <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
     <p style="color: #999; font-size: 12px;">
       DDNS Service<br>
-      <a href="https://ddns.rockygray.com">https://ddns.rockygray.com</a>
+      <a href="%s">%s</a>
     </p>
   </div>
 </body>
-</html>`, ownerID, apiKey, apiKey, apiKey, ownerID)
+</html>`, ownerID, apiKey, apiKey, APIEndpoint, apiKey, ownerID, APIEndpoint, APIEndpoint)
 }
 
 // Ensure SESService implements Service.

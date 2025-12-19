@@ -10,7 +10,7 @@ terraform {
 
   backend "s3" {
     bucket       = "grocky-tfstate"
-    key          = "ddns.rockygray.com/terraform.tfstate"
+    key          = "ddns.grocky.net/terraform.tfstate"
     region       = "us-east-1"
     use_lockfile = true
     encrypt      = true
@@ -31,10 +31,8 @@ variable "environment" {
   default     = "prod"
 }
 
-variable "domain_name" {
-  description = "The domain name for the DDNS service"
-  type        = string
-  default     = "grocky.net"
+locals {
+  domain_name = "grocky.net"
 }
 
 # =============================================================================

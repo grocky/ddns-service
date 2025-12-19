@@ -57,7 +57,7 @@ test: ## Run all tests
 
 .PHONY: test-endpoint
 test-endpoint: ## Test the deployed endpoint with a GET request
-	curl -s https://ddns.rockygray.com/public-ip | jq .
+	curl -s https://ddns.grocky.net/public-ip | jq .
 
 # =============================================================================
 # Deploy

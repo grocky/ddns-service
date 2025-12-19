@@ -1,18 +1,9 @@
 # =============================================================================
-# Route53 Zone
-# =============================================================================
-
-data "aws_route53_zone" "main" {
-  zone_id      = "Z33Z8O8Z1ZA8HH"
-  private_zone = false
-}
-
-# =============================================================================
 # API Gateway Custom Domain
 # =============================================================================
 
 resource "aws_api_gateway_domain_name" "ddns_service" {
-  domain_name              = "ddns.rockygray.com"
+  domain_name              = "ddns.${local.domain_name}"
   regional_certificate_arn = aws_acm_certificate_validation.cert.certificate_arn
 
   endpoint_configuration {
@@ -27,11 +18,11 @@ resource "aws_api_gateway_domain_name" "ddns_service" {
 }
 
 # =============================================================================
-# DNS Record
+# DNS Record for API Gateway
 # =============================================================================
 
-resource "aws_route53_record" "ddns" {
-  zone_id = data.aws_route53_zone.main.zone_id
+resource "aws_route53_record" "api" {
+  zone_id = aws_route53_zone.ddns.zone_id
   name    = aws_api_gateway_domain_name.ddns_service.domain_name
   type    = "A"
 

@@ -37,7 +37,7 @@ flowchart TB
     end
 
     subgraph aws["AWS Cloud"]
-        apigw["API Gateway\n(ddns.rockygray.com)"]
+        apigw["API Gateway\n(ddns.grocky.net)"]
         lambda["Lambda Function\n(Go)"]
         dynamodb[("DynamoDB\n(Owners + IP Mappings)")]
         route53["Route53\n(DNS Records)"]
@@ -99,7 +99,7 @@ Authorization: Bearer ddns_sk_your_api_key_here
 Returns the public IP address of the caller. No authentication required.
 
 ```bash
-curl https://ddns.rockygray.com/public-ip
+curl https://ddns.grocky.net/public-ip
 ```
 
 ```json
@@ -113,7 +113,7 @@ curl https://ddns.rockygray.com/public-ip
 Create an owner account to receive your API key. **Save your API key securely - it is only shown once!**
 
 ```bash
-curl -X POST https://ddns.rockygray.com/owners \
+curl -X POST https://ddns.grocky.net/owners \
   -H "Content-Type: application/json" \
   -d '{
     "ownerId": "my-home-lab",
@@ -141,7 +141,7 @@ Poll this endpoint to update your DNS record. The service automatically:
 **Rate limited to 2 IP changes per hour.**
 
 ```bash
-curl -X POST https://ddns.rockygray.com/update \
+curl -X POST https://ddns.grocky.net/update \
   -H "Authorization: Bearer ddns_sk_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{
@@ -175,7 +175,7 @@ The `Retry-After` header indicates how many seconds until you can try again.
 Retrieve the registered IP and subdomain for a specific owner and location. **Requires authentication.**
 
 ```bash
-curl https://ddns.rockygray.com/lookup/my-home-lab/home \
+curl https://ddns.grocky.net/lookup/my-home-lab/home \
   -H "Authorization: Bearer ddns_sk_your_api_key_here"
 ```
 
@@ -194,7 +194,7 @@ curl https://ddns.rockygray.com/lookup/my-home-lab/home \
 Generate a new API key (invalidates the old one). **Requires authentication with your current key.**
 
 ```bash
-curl -X POST https://ddns.rockygray.com/owners/my-home-lab/rotate \
+curl -X POST https://ddns.grocky.net/owners/my-home-lab/rotate \
   -H "Authorization: Bearer ddns_sk_your_current_key"
 ```
 
@@ -211,7 +211,7 @@ curl -X POST https://ddns.rockygray.com/owners/my-home-lab/rotate \
 If you lose your API key, request a new one via email. A new key will be sent to the email address on file.
 
 ```bash
-curl -X POST https://ddns.rockygray.com/owners/my-home-lab/recover \
+curl -X POST https://ddns.grocky.net/owners/my-home-lab/recover \
   -H "Content-Type: application/json" \
   -d '{"email": "you@example.com"}'
 ```
@@ -226,12 +226,12 @@ curl -X POST https://ddns.rockygray.com/owners/my-home-lab/recover \
 
 ### Option 1: Use the Hosted Service
 
-The easiest way to get started is to use the hosted service at `ddns.rockygray.com`.
+The easiest way to get started is to use the hosted service at `ddns.grocky.net`.
 
 **Step 1: Create your owner account**
 
 ```bash
-curl -X POST https://ddns.rockygray.com/owners \
+curl -X POST https://ddns.grocky.net/owners \
   -H "Content-Type: application/json" \
   -d '{"ownerId":"my-home","email":"you@example.com"}'
 ```
@@ -242,7 +242,7 @@ Save the `apiKey` from the response - you'll need it for all future requests!
 
 ```bash
 # Add to crontab (runs every 15 minutes)
-*/15 * * * * curl -s -X POST https://ddns.rockygray.com/update \
+*/15 * * * * curl -s -X POST https://ddns.grocky.net/update \
   -H "Authorization: Bearer ddns_sk_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{"ownerId":"my-home","location":"home"}' > /dev/null
@@ -258,7 +258,7 @@ OWNER_ID="my-home"
 LOCATION="home"
 API_KEY="ddns_sk_your_api_key_here"
 
-response=$(curl -s -X POST https://ddns.rockygray.com/update \
+response=$(curl -s -X POST https://ddns.grocky.net/update \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
   -d "{\"ownerId\":\"${OWNER_ID}\",\"location\":\"${LOCATION}\"}")
@@ -307,13 +307,13 @@ Keep track of your home lab's public IP and always connect via a stable hostname
 
 ```bash
 # First, create your owner account (one-time setup)
-curl -X POST https://ddns.rockygray.com/owners \
+curl -X POST https://ddns.grocky.net/owners \
   -H "Content-Type: application/json" \
   -d '{"ownerId":"homelab","email":"you@example.com"}'
 # Save the API key!
 
 # On your home server (via cron)
-*/15 * * * * curl -s -X POST https://ddns.rockygray.com/update \
+*/15 * * * * curl -s -X POST https://ddns.grocky.net/update \
   -H "Authorization: Bearer ddns_sk_your_api_key" \
   -H "Content-Type: application/json" \
   -d '{"ownerId":"homelab","location":"primary"}' > /dev/null
@@ -328,19 +328,19 @@ Track IP addresses across multiple locations:
 
 ```bash
 # Create owner account first
-curl -X POST https://ddns.rockygray.com/owners \
+curl -X POST https://ddns.grocky.net/owners \
   -H "Content-Type: application/json" \
   -d '{"ownerId":"acme-corp","email":"admin@acme.com"}'
 
 # Set up polling at each location
 # At headquarters:
-curl -X POST https://ddns.rockygray.com/update \
+curl -X POST https://ddns.grocky.net/update \
   -H "Authorization: Bearer ddns_sk_your_api_key" \
   -H "Content-Type: application/json" \
   -d '{"ownerId":"acme-corp","location":"headquarters"}'
 
 # At warehouse:
-curl -X POST https://ddns.rockygray.com/update \
+curl -X POST https://ddns.grocky.net/update \
   -H "Authorization: Bearer ddns_sk_your_api_key" \
   -H "Content-Type: application/json" \
   -d '{"ownerId":"acme-corp","location":"warehouse"}'
