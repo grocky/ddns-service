@@ -31,6 +31,12 @@ variable "environment" {
   default     = "prod"
 }
 
+variable "domain_name" {
+  description = "The domain name for the DDNS service"
+  type        = string
+  default     = "grocky.net"
+}
+
 # =============================================================================
 # Data Sources
 # =============================================================================

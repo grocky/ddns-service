@@ -32,4 +32,10 @@ var (
 
 	// ErrForbidden is returned when the authenticated owner doesn't match the requested resource.
 	ErrForbidden = errors.New("forbidden")
+
+	// ErrRateLimitExceeded is returned when too many IP changes occur in an hour.
+	ErrRateLimitExceeded = errors.New("rate limit exceeded: maximum 2 IP changes per hour")
+
+	// ErrMissingIP is returned when the client IP cannot be determined.
+	ErrMissingIP = errors.New("could not determine client IP")
 )

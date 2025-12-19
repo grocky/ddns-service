@@ -27,6 +27,8 @@ type MappingBody struct {
 	OwnerID   string `json:"ownerId"`
 	Location  string `json:"location"`
 	IP        string `json:"ip"`
+	Subdomain string `json:"subdomain"`
+	Changed   bool   `json:"changed,omitempty"`
 	UpdatedAt string `json:"updatedAt"`
 }
 
@@ -65,6 +67,7 @@ type ErrorBody struct {
 type RequestError struct {
 	Status      int
 	Description string
+	RetryAfter  int // Seconds until retry is allowed (for rate limiting)
 }
 
 // Error implements the error interface.

@@ -77,6 +77,7 @@ func TestRegister_Success_AutoIP(t *testing.T) {
 			assert.Equal(t, "test-owner", mapping.OwnerID)
 			assert.Equal(t, "home", mapping.LocationName)
 			assert.Equal(t, "203.0.113.50", mapping.IP)
+			assert.Assert(t, mapping.Subdomain != "", "subdomain should be set")
 			return nil
 		},
 	}
@@ -86,7 +87,7 @@ func TestRegister_Success_AutoIP(t *testing.T) {
 			"Authorization":   "Bearer " + apiKey,
 			"X-Forwarded-For": "203.0.113.50",
 		},
-		Body: `{"ownerId":"test-owner","location":"home","ip":"auto"}`,
+		Body: `{"ownerId":"test-owner","location":"home"}`,
 	}
 
 	resp, err := Register(ctx, request, repo, logger)
@@ -96,9 +97,10 @@ func TestRegister_Success_AutoIP(t *testing.T) {
 	assert.Equal(t, "test-owner", resp.Body.OwnerID)
 	assert.Equal(t, "home", resp.Body.Location)
 	assert.Equal(t, "203.0.113.50", resp.Body.IP)
+	assert.Assert(t, resp.Body.Subdomain != "", "subdomain should be in response")
 }
 
-func TestRegister_Success_ExplicitIP(t *testing.T) {
+func TestRegister_Success_WithSourceIP(t *testing.T) {
 	ctx := context.Background()
 	logger := newTestLogger()
 
@@ -124,7 +126,12 @@ func TestRegister_Success_ExplicitIP(t *testing.T) {
 		Headers: map[string]string{
 			"Authorization": "Bearer " + apiKey,
 		},
-		Body: `{"ownerId":"test-owner","location":"office","ip":"192.168.1.100"}`,
+		RequestContext: events.APIGatewayProxyRequestContext{
+			Identity: events.APIGatewayRequestIdentity{
+				SourceIP: "192.168.1.100",
+			},
+		},
+		Body: `{"ownerId":"test-owner","location":"office"}`,
 	}
 
 	resp, err := Register(ctx, request, repo, logger)
@@ -165,7 +172,7 @@ func TestRegister_MissingOwnerID(t *testing.T) {
 		Headers: map[string]string{
 			"Authorization": "Bearer ddns_sk_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop",
 		},
-		Body: `{"location":"home","ip":"auto"}`,
+		Body: `{"location":"home"}`,
 	}
 
 	resp, err := Register(ctx, request, repo, logger)
@@ -186,7 +193,7 @@ func TestRegister_MissingLocation(t *testing.T) {
 		Headers: map[string]string{
 			"Authorization": "Bearer ddns_sk_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop",
 		},
-		Body: `{"ownerId":"test-owner","ip":"auto"}`,
+		Body: `{"ownerId":"test-owner"}`,
 	}
 
 	resp, err := Register(ctx, request, repo, logger)
@@ -205,7 +212,7 @@ func TestRegister_Unauthorized_MissingAuth(t *testing.T) {
 
 	request := events.APIGatewayProxyRequest{
 		Headers: map[string]string{},
-		Body:    `{"ownerId":"test-owner","location":"home","ip":"auto"}`,
+		Body:    `{"ownerId":"test-owner","location":"home"}`,
 	}
 
 	resp, err := Register(ctx, request, repo, logger)
@@ -234,7 +241,7 @@ func TestRegister_Unauthorized_WrongKey(t *testing.T) {
 		Headers: map[string]string{
 			"Authorization": "Bearer ddns_sk_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop",
 		},
-		Body: `{"ownerId":"test-owner","location":"home","ip":"auto"}`,
+		Body: `{"ownerId":"test-owner","location":"home"}`,
 	}
 
 	resp, err := Register(ctx, request, repo, logger)
@@ -245,7 +252,7 @@ func TestRegister_Unauthorized_WrongKey(t *testing.T) {
 	assert.Equal(t, 0, resp.Status)
 }
 
-func TestRegister_AutoIP_NoForwardedFor(t *testing.T) {
+func TestRegister_NoIP_Available(t *testing.T) {
 	ctx := context.Background()
 	logger := newTestLogger()
 
@@ -266,16 +273,16 @@ func TestRegister_AutoIP_NoForwardedFor(t *testing.T) {
 	request := events.APIGatewayProxyRequest{
 		Headers: map[string]string{
 			"Authorization": "Bearer " + apiKey,
-			// No X-Forwarded-For header
+			// No X-Forwarded-For header and no SourceIP
 		},
-		Body: `{"ownerId":"test-owner","location":"home","ip":"auto"}`,
+		Body: `{"ownerId":"test-owner","location":"home"}`,
 	}
 
 	resp, err := Register(ctx, request, repo, logger)
 
 	assert.Assert(t, err != nil)
 	assert.Equal(t, http.StatusBadRequest, err.Status)
-	assert.Equal(t, "could not determine client IP", err.Description)
+	assert.Equal(t, domain.ErrMissingIP.Error(), err.Description)
 	assert.Equal(t, 0, resp.Status)
 }
 
@@ -305,7 +312,7 @@ func TestRegister_RepositoryError(t *testing.T) {
 			"Authorization":   "Bearer " + apiKey,
 			"X-Forwarded-For": "203.0.113.50",
 		},
-		Body: `{"ownerId":"test-owner","location":"home","ip":"auto"}`,
+		Body: `{"ownerId":"test-owner","location":"home"}`,
 	}
 
 	resp, err := Register(ctx, request, repo, logger)

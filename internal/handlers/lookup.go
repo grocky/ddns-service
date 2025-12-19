@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/grocky/ddns-service/internal/auth"
+	"github.com/grocky/ddns-service/internal/dns"
 	"github.com/grocky/ddns-service/internal/repository"
 	"github.com/grocky/ddns-service/internal/response"
 )
@@ -68,10 +69,13 @@ func Lookup(
 		}
 	}
 
+	fullSubdomain := dns.FullSubdomain(mapping.OwnerID, mapping.LocationName)
+
 	logger.Info("mapping found",
 		"ownerId", mapping.OwnerID,
 		"location", mapping.LocationName,
 		"ip", mapping.IP,
+		"subdomain", fullSubdomain,
 	)
 
 	return response.MappingResponse{
@@ -80,6 +84,7 @@ func Lookup(
 			OwnerID:   mapping.OwnerID,
 			Location:  mapping.LocationName,
 			IP:        mapping.IP,
+			Subdomain: fullSubdomain,
 			UpdatedAt: mapping.UpdatedAt.Format(time.RFC3339),
 		},
 	}, nil

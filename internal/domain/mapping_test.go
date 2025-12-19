@@ -7,63 +7,49 @@ import (
 	"gotest.tools/assert"
 )
 
-func TestRegisterRequest_Validate(t *testing.T) {
+func TestUpdateRequest_Validate(t *testing.T) {
 	testCases := []struct {
 		name        string
-		request     RegisterRequest
+		request     UpdateRequest
 		expectedErr error
 	}{
 		{
-			name: "valid request with auto IP",
-			request: RegisterRequest{
+			name: "valid request",
+			request: UpdateRequest{
 				OwnerID:  "my-home-lab",
 				Location: "home",
-				IP:       "auto",
 			},
 			expectedErr: nil,
 		},
 		{
-			name: "valid request with explicit IP",
-			request: RegisterRequest{
+			name: "valid request with different location",
+			request: UpdateRequest{
 				OwnerID:  "my-home-lab",
 				Location: "office",
-				IP:       "192.168.1.100",
-			},
-			expectedErr: nil,
-		},
-		{
-			name: "valid request with empty IP (defaults to auto)",
-			request: RegisterRequest{
-				OwnerID:  "my-home-lab",
-				Location: "office",
-				IP:       "",
 			},
 			expectedErr: nil,
 		},
 		{
 			name: "missing ownerId",
-			request: RegisterRequest{
+			request: UpdateRequest{
 				OwnerID:  "",
 				Location: "home",
-				IP:       "auto",
 			},
 			expectedErr: ErrMissingOwnerID,
 		},
 		{
 			name: "missing location",
-			request: RegisterRequest{
+			request: UpdateRequest{
 				OwnerID:  "my-home-lab",
 				Location: "",
-				IP:       "auto",
 			},
 			expectedErr: ErrMissingLocation,
 		},
 		{
 			name: "missing both",
-			request: RegisterRequest{
+			request: UpdateRequest{
 				OwnerID:  "",
 				Location: "",
-				IP:       "auto",
 			},
 			expectedErr: ErrMissingOwnerID, // OwnerID is checked first
 		},

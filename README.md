@@ -1,8 +1,8 @@
 # DDNS Service
 
-**A serverless Dynamic DNS service for keeping track of your home or office public IP address.**
+**A serverless Dynamic DNS service that automatically updates DNS records when your IP changes.**
 
-Stop losing access to your home network. Whether you're running a home lab, self-hosting services, or need reliable remote access, DDNS Service automatically tracks your public IP so you always know how to connect back home.
+Stop losing access to your home network. Whether you're running a home lab, self-hosting services, or need reliable remote access, DDNS Service automatically tracks your public IP and updates Route53 DNS records so you always have a stable hostname to connect to.
 
 ## Why DDNS Service?
 
@@ -17,11 +17,12 @@ Traditional solutions require:
 
 ## Features
 
-- **Simple REST API** - Register and lookup IPs with straightforward HTTP calls
+- **Automatic DNS Updates** - Updates Route53 A records when your IP changes
+- **Stable Subdomains** - Each location gets a permanent subdomain (e.g., `a3f8c2d1.grocky.net`)
+- **Simple REST API** - Poll the `/update` endpoint and let the service handle the rest
 - **Secure by default** - API key authentication protects your data
+- **Rate limited** - Prevents abuse with a maximum of 2 IP changes per hour
 - **Multi-location support** - Track IPs for multiple locations (home, office, cabin, etc.)
-- **Multi-tenant** - Support multiple users/owners with isolated data
-- **Instant IP detection** - Get your current public IP with a single request
 - **Serverless architecture** - Scales automatically, pay only for what you use
 - **Privacy-first** - Self-hostable, your data stays yours
 
@@ -39,6 +40,7 @@ flowchart TB
         apigw["API Gateway\n(ddns.rockygray.com)"]
         lambda["Lambda Function\n(Go)"]
         dynamodb[("DynamoDB\n(Owners + IP Mappings)")]
+        route53["Route53\n(DNS Records)"]
         ses["SES\n(Email)"]
     end
 
@@ -46,21 +48,32 @@ flowchart TB
         direction LR
         e1["GET /public-ip"]
         e2["POST /owners"]
-        e3["POST /register"]
+        e3["POST /update"]
         e4["GET /lookup/{owner}/{location}"]
     end
 
-    daemon -->|"register IP\n(with API key)"| apigw
-    cron -->|"register IP\n(with API key)"| apigw
-    ha -->|"register IP\n(with API key)"| apigw
+    daemon -->|"poll /update\n(with API key)"| apigw
+    cron -->|"poll /update\n(with API key)"| apigw
+    ha -->|"poll /update\n(with API key)"| apigw
 
     apigw --> lambda
     lambda --> dynamodb
+    lambda -->|"update A record"| route53
     lambda --> ses
     lambda --> endpoints
 
-    remote["Remote Access\n(You, away from home)"] -->|"lookup IP\n(with API key)"| apigw
+    remote["Remote Access\n(You, away from home)"] -->|"DNS lookup"| route53
+    remote -->|"Connect via\na3f8c2d1.grocky.net"| clients
 ```
+
+## How It Works
+
+1. **Create an owner account** - Get your API key
+2. **Poll the `/update` endpoint** - The service detects your IP automatically
+3. **Automatic DNS updates** - When your IP changes, the service updates Route53
+4. **Connect using your subdomain** - Use your stable hostname (e.g., `a3f8c2d1.grocky.net`)
+
+Each owner/location combination gets a deterministic subdomain based on a hash of `{ownerId}-{location}`. This subdomain never changes, even when your IP does.
 
 ## API Reference
 
@@ -72,14 +85,14 @@ Most endpoints require authentication via API key. Include your API key in the `
 Authorization: Bearer ddns_sk_your_api_key_here
 ```
 
-| Endpoint | Authentication |
-|----------|----------------|
-| `GET /public-ip` | Not required |
-| `POST /owners` | Not required |
-| `POST /owners/{id}/recover` | Not required |
-| `POST /owners/{id}/rotate` | Required |
-| `POST /register` | Required |
-| `GET /lookup/{owner}/{location}` | Required |
+| Endpoint | Authentication | Rate Limited |
+|----------|----------------|--------------|
+| `GET /public-ip` | Not required | No |
+| `POST /owners` | Not required | No |
+| `POST /owners/{id}/recover` | Not required | No |
+| `POST /owners/{id}/rotate` | Required | No |
+| `POST /update` | Required | Yes (2/hour) |
+| `GET /lookup/{owner}/{location}` | Required | No |
 
 ### Get Your Public IP
 
@@ -117,33 +130,49 @@ curl -X POST https://ddns.rockygray.com/owners \
 }
 ```
 
-### Register an IP Address
+### Update DNS (Poll Endpoint)
 
-Register or update the IP address for a location. Use `"ip": "auto"` to automatically use your current public IP. **Requires authentication.**
+Poll this endpoint to update your DNS record. The service automatically:
+1. Detects your public IP from the request
+2. Checks if it has changed since the last update
+3. Updates Route53 if needed
+4. Returns your stable subdomain
+
+**Rate limited to 2 IP changes per hour.**
 
 ```bash
-curl -X POST https://ddns.rockygray.com/register \
+curl -X POST https://ddns.rockygray.com/update \
   -H "Authorization: Bearer ddns_sk_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{
     "ownerId": "my-home-lab",
-    "location": "home",
-    "ip": "auto"
+    "location": "home"
   }'
 ```
 
+**Response (IP unchanged or updated):**
 ```json
 {
   "ownerId": "my-home-lab",
   "location": "home",
   "ip": "203.0.113.42",
+  "subdomain": "6abf7de6.grocky.net",
+  "changed": false,
   "updatedAt": "2025-01-15T10:30:00Z"
 }
 ```
 
+**Response (429 Too Many Requests - rate limit exceeded):**
+```json
+{
+  "description": "rate limit exceeded: maximum 2 IP changes per hour"
+}
+```
+The `Retry-After` header indicates how many seconds until you can try again.
+
 ### Lookup an IP Address
 
-Retrieve the registered IP for a specific owner and location. **Requires authentication.**
+Retrieve the registered IP and subdomain for a specific owner and location. **Requires authentication.**
 
 ```bash
 curl https://ddns.rockygray.com/lookup/my-home-lab/home \
@@ -155,6 +184,7 @@ curl https://ddns.rockygray.com/lookup/my-home-lab/home \
   "ownerId": "my-home-lab",
   "location": "home",
   "ip": "203.0.113.42",
+  "subdomain": "6abf7de6.grocky.net",
   "updatedAt": "2025-01-15T10:30:00Z"
 }
 ```
@@ -208,14 +238,14 @@ curl -X POST https://ddns.rockygray.com/owners \
 
 Save the `apiKey` from the response - you'll need it for all future requests!
 
-**Step 2: Set up automatic IP registration with cron**
+**Step 2: Set up automatic polling with cron**
 
 ```bash
 # Add to crontab (runs every 15 minutes)
-*/15 * * * * curl -s -X POST https://ddns.rockygray.com/register \
+*/15 * * * * curl -s -X POST https://ddns.rockygray.com/update \
   -H "Authorization: Bearer ddns_sk_your_api_key_here" \
   -H "Content-Type: application/json" \
-  -d '{"ownerId":"my-home","location":"home","ip":"auto"}' > /dev/null
+  -d '{"ownerId":"my-home","location":"home"}' > /dev/null
 ```
 
 **Or create a simple shell script:**
@@ -228,10 +258,28 @@ OWNER_ID="my-home"
 LOCATION="home"
 API_KEY="ddns_sk_your_api_key_here"
 
-curl -s -X POST https://ddns.rockygray.com/register \
+response=$(curl -s -X POST https://ddns.rockygray.com/update \
   -H "Authorization: Bearer ${API_KEY}" \
   -H "Content-Type: application/json" \
-  -d "{\"ownerId\":\"${OWNER_ID}\",\"location\":\"${LOCATION}\",\"ip\":\"auto\"}"
+  -d "{\"ownerId\":\"${OWNER_ID}\",\"location\":\"${LOCATION}\"}")
+
+# Extract subdomain and check if changed
+subdomain=$(echo "$response" | jq -r '.subdomain')
+changed=$(echo "$response" | jq -r '.changed')
+
+if [ "$changed" = "true" ]; then
+    echo "IP updated! Your subdomain: $subdomain"
+else
+    echo "IP unchanged. Your subdomain: $subdomain"
+fi
+```
+
+**Step 3: Connect using your subdomain**
+
+Once set up, you can always connect to your home network using your stable subdomain:
+
+```bash
+ssh user@6abf7de6.grocky.net
 ```
 
 ### Option 2: Use the pubip CLI
@@ -251,35 +299,11 @@ make build-pubip
 2601:123:4567:89ab::1
 ```
 
-**Use pubip in a daemon script:**
-
-```bash
-#!/bin/bash
-# save as: ddns-daemon.sh
-
-OWNER_ID="my-home"
-LOCATION="home"
-API_KEY="ddns_sk_your_api_key_here"
-INTERVAL=900  # 15 minutes
-
-while true; do
-    IP=$(./bin/pubip)
-    if [ -n "$IP" ]; then
-        curl -s -X POST https://ddns.rockygray.com/register \
-          -H "Authorization: Bearer ${API_KEY}" \
-          -H "Content-Type: application/json" \
-          -d "{\"ownerId\":\"${OWNER_ID}\",\"location\":\"${LOCATION}\",\"ip\":\"${IP}\"}"
-        echo "Registered IP: $IP"
-    fi
-    sleep $INTERVAL
-done
-```
-
 ## Use Cases
 
 ### Home Lab Access
 
-Keep track of your home lab's public IP so you can SSH in from anywhere:
+Keep track of your home lab's public IP and always connect via a stable hostname:
 
 ```bash
 # First, create your owner account (one-time setup)
@@ -289,15 +313,13 @@ curl -X POST https://ddns.rockygray.com/owners \
 # Save the API key!
 
 # On your home server (via cron)
-*/15 * * * * curl -s -X POST https://ddns.rockygray.com/register \
+*/15 * * * * curl -s -X POST https://ddns.rockygray.com/update \
   -H "Authorization: Bearer ddns_sk_your_api_key" \
   -H "Content-Type: application/json" \
-  -d '{"ownerId":"homelab","location":"primary","ip":"auto"}' > /dev/null
+  -d '{"ownerId":"homelab","location":"primary"}' > /dev/null
 
-# From your laptop, anywhere in the world
-HOME_IP=$(curl -s https://ddns.rockygray.com/lookup/homelab/primary \
-  -H "Authorization: Bearer ddns_sk_your_api_key" | jq -r '.ip')
-ssh user@$HOME_IP
+# From your laptop, anywhere in the world - use your stable subdomain
+ssh user@a1b2c3d4.grocky.net
 ```
 
 ### Multi-Site Monitoring
@@ -310,36 +332,43 @@ curl -X POST https://ddns.rockygray.com/owners \
   -H "Content-Type: application/json" \
   -d '{"ownerId":"acme-corp","email":"admin@acme.com"}'
 
-# Register each location (include API key in all requests)
-curl -X POST https://ddns.rockygray.com/register \
+# Set up polling at each location
+# At headquarters:
+curl -X POST https://ddns.rockygray.com/update \
   -H "Authorization: Bearer ddns_sk_your_api_key" \
   -H "Content-Type: application/json" \
-  -d '{"ownerId":"acme-corp","location":"headquarters","ip":"auto"}'
+  -d '{"ownerId":"acme-corp","location":"headquarters"}'
 
-curl -X POST https://ddns.rockygray.com/register \
+# At warehouse:
+curl -X POST https://ddns.rockygray.com/update \
   -H "Authorization: Bearer ddns_sk_your_api_key" \
   -H "Content-Type: application/json" \
-  -d '{"ownerId":"acme-corp","location":"warehouse","ip":"auto"}'
+  -d '{"ownerId":"acme-corp","location":"warehouse"}'
 
-# Look up any location
-curl -H "Authorization: Bearer ddns_sk_your_api_key" \
-  https://ddns.rockygray.com/lookup/acme-corp/headquarters
-
-curl -H "Authorization: Bearer ddns_sk_your_api_key" \
-  https://ddns.rockygray.com/lookup/acme-corp/warehouse
+# Each location gets its own stable subdomain
+# headquarters: abc12345.grocky.net
+# warehouse: def67890.grocky.net
 ```
 
 ### VPN Endpoint Discovery
 
-Automatically update your VPN client configuration when your home IP changes:
+Use your stable subdomain directly in your VPN client configuration:
 
-```bash
-#!/bin/bash
-API_KEY="ddns_sk_your_api_key"
-NEW_IP=$(curl -s -H "Authorization: Bearer ${API_KEY}" \
-  https://ddns.rockygray.com/lookup/my-vpn/home | jq -r '.ip')
-sed -i "s/remote .* 1194/remote $NEW_IP 1194/" /etc/openvpn/client.conf
 ```
+# /etc/openvpn/client.conf
+remote a1b2c3d4.grocky.net 1194
+```
+
+No need to update the configuration when your IP changes - the subdomain always points to your current IP!
+
+## Rate Limiting
+
+The `/update` endpoint is rate limited to **2 IP changes per hour** per owner/location. This prevents abuse while allowing for normal IP changes.
+
+- Polling when your IP hasn't changed does NOT count against the limit
+- Only actual IP changes count toward the limit
+- The limit resets at the top of each hour
+- When rate limited, the response includes a `Retry-After` header
 
 ## Roadmap
 
@@ -359,6 +388,8 @@ make tf-init
 # Deploy to your AWS account
 make deploy
 ```
+
+After deploying the Route53 zone, update your domain registrar's nameservers to the values from the Terraform output.
 
 ## License
 

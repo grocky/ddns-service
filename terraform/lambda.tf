@@ -83,6 +83,33 @@ resource "aws_iam_role_policy" "ses" {
   })
 }
 
+# Route53 DNS record management policy
+resource "aws_iam_role_policy" "route53" {
+  name = "route53-dns-management"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "route53:ChangeResourceRecordSets",
+          "route53:ListResourceRecordSets"
+        ]
+        Resource = aws_route53_zone.ddns.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "route53:GetHostedZone"
+        ]
+        Resource = aws_route53_zone.ddns.arn
+      }
+    ]
+  })
+}
+
 # =============================================================================
 # CloudWatch Log Group
 # =============================================================================
@@ -117,7 +144,8 @@ resource "aws_lambda_function" "ddns_service" {
 
   environment {
     variables = {
-      ENVIRONMENT = var.environment
+      ENVIRONMENT            = var.environment
+      ROUTE53_HOSTED_ZONE_ID = aws_route53_zone.ddns.zone_id
     }
   }
 

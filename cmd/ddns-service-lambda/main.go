@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -14,7 +15,9 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
 	"github.com/aws/aws-sdk-go-v2/service/ses"
+	"github.com/grocky/ddns-service/internal/dns"
 	"github.com/grocky/ddns-service/internal/email"
 	"github.com/grocky/ddns-service/internal/handlers"
 	"github.com/grocky/ddns-service/internal/repository"
@@ -27,6 +30,7 @@ var (
 	}))
 	repo     repository.Repository
 	emailSvc email.Service
+	dnsSvc   dns.Service
 	initOnce sync.Once
 	initErr  error
 )
@@ -49,6 +53,14 @@ func initServices(ctx context.Context) error {
 		// Initialize SES email service
 		sesClient := ses.NewFromConfig(cfg)
 		emailSvc = email.NewSESService(sesClient, logger)
+
+		// Initialize Route53 DNS service
+		hostedZoneID := os.Getenv("ROUTE53_HOSTED_ZONE_ID")
+		if hostedZoneID == "" {
+			logger.Warn("ROUTE53_HOSTED_ZONE_ID not set, DNS updates will fail")
+		}
+		route53Client := route53.NewFromConfig(cfg)
+		dnsSvc = dns.NewRoute53Service(route53Client, hostedZoneID, logger)
 
 		logger.Info("services initialized")
 	})
@@ -117,9 +129,18 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return jsonResponse(resp.Status, resp.Body)
 	}
 
-	// POST /register - register IP (requires auth)
+	// POST /register - register IP (requires auth) - deprecated, use /update
 	if method == http.MethodPost && route == "/register" {
 		resp, reqErr := handlers.Register(ctx, request, repo, logger)
+		if reqErr != nil {
+			return clientError(reqErr)
+		}
+		return jsonResponse(resp.Status, resp.Body)
+	}
+
+	// POST /update - update DNS if IP changed (requires auth)
+	if method == http.MethodPost && route == "/update" {
+		resp, reqErr := handlers.Update(ctx, request, repo, dnsSvc, logger)
 		if reqErr != nil {
 			return clientError(reqErr)
 		}
@@ -179,12 +200,19 @@ func serverError(err error) (events.APIGatewayProxyResponse, error) {
 func clientError(reqErr *response.RequestError) (events.APIGatewayProxyResponse, error) {
 	logger.Debug("client error", "status", reqErr.Status, "description", reqErr.Description)
 
+	headers := map[string]string{
+		"Content-Type": "application/json",
+	}
+
+	// Add Retry-After header for rate limiting
+	if reqErr.RetryAfter > 0 {
+		headers["Retry-After"] = strconv.Itoa(reqErr.RetryAfter)
+	}
+
 	return events.APIGatewayProxyResponse{
 		StatusCode: reqErr.Status,
-		Headers: map[string]string{
-			"Content-Type": "application/json",
-		},
-		Body: response.BuildErrorJSON(reqErr.Error(), logger),
+		Headers:    headers,
+		Body:       response.BuildErrorJSON(reqErr.Error(), logger),
 	}, nil
 }
 

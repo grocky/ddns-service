@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/grocky/ddns-service/internal/auth"
+	"github.com/grocky/ddns-service/internal/dns"
 	"github.com/grocky/ddns-service/internal/domain"
 	"github.com/grocky/ddns-service/internal/repository"
 	"github.com/grocky/ddns-service/internal/response"
@@ -50,25 +52,41 @@ func Register(
 		return response.MappingResponse{}, authErr
 	}
 
-	// Determine IP address
-	ip := req.IP
-	if ip == "" || ip == "auto" {
-		ip = request.Headers["X-Forwarded-For"]
-		if ip == "" {
-			logger.Warn("could not determine client IP")
-			return response.MappingResponse{}, &response.RequestError{
-				Status:      http.StatusBadRequest,
-				Description: "could not determine client IP",
-			}
+	// Determine IP address from request headers
+	ip := request.Headers["X-Forwarded-For"]
+	if ip == "" {
+		ip = request.Headers["x-forwarded-for"]
+	}
+	if ip != "" {
+		// X-Forwarded-For can contain multiple IPs, take the first one
+		parts := strings.Split(ip, ",")
+		if len(parts) > 0 {
+			ip = strings.TrimSpace(parts[0])
+		}
+	}
+	if ip == "" {
+		ip = request.RequestContext.Identity.SourceIP
+	}
+	if ip == "" {
+		logger.Warn("could not determine client IP")
+		return response.MappingResponse{}, &response.RequestError{
+			Status:      http.StatusBadRequest,
+			Description: domain.ErrMissingIP.Error(),
 		}
 	}
 
+	// Generate subdomain
+	subdomain := dns.GenerateSubdomain(req.OwnerID, req.Location)
+	fullSubdomain := dns.FullSubdomain(req.OwnerID, req.Location)
+
 	// Create mapping
+	now := time.Now().UTC()
 	mapping := domain.IPMapping{
 		OwnerID:      req.OwnerID,
 		LocationName: req.Location,
 		IP:           ip,
-		UpdatedAt:    time.Now().UTC(),
+		Subdomain:    subdomain,
+		UpdatedAt:    now,
 	}
 
 	// Save to repository
@@ -84,6 +102,7 @@ func Register(
 		"ownerId", mapping.OwnerID,
 		"location", mapping.LocationName,
 		"ip", mapping.IP,
+		"subdomain", fullSubdomain,
 	)
 
 	return response.MappingResponse{
@@ -92,6 +111,7 @@ func Register(
 			OwnerID:   mapping.OwnerID,
 			Location:  mapping.LocationName,
 			IP:        mapping.IP,
+			Subdomain: fullSubdomain,
 			UpdatedAt: mapping.UpdatedAt.Format(time.RFC3339),
 		},
 	}, nil
