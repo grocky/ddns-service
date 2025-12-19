@@ -3,8 +3,9 @@
 # =============================================================================
 
 resource "aws_acm_certificate" "ddns_service" {
-  domain_name       = "ddns.${local.domain_name}"
-  validation_method = "DNS"
+  domain_name               = "*.${local.domain_name}"
+  subject_alternative_names = [local.domain_name]
+  validation_method         = "DNS"
 
   lifecycle {
     create_before_destroy = true
