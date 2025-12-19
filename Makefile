@@ -8,6 +8,7 @@ PROJECT_NAME := ddns-service
 # Source file dependencies
 LAMBDA_SOURCES := $(shell find cmd/ddns-service-lambda internal pkg -name "*.go")
 PUBIP_SOURCES  := $(shell find cmd/pubip pkg -name "*.go")
+ADMIN_SOURCES  := $(shell find cmd/ddns-admin internal -name "*.go")
 
 help: ## Print this help message
 	@awk -F ':|##' '/^[^\t].+?:.*?##/ { printf "${GREEN}%-20s${NC}%s\n", $$1, $$NF }' $(MAKEFILE_LIST) | sort
@@ -44,8 +45,17 @@ bin/pubip-debug: $(PUBIP_SOURCES)
 .PHONY: build-pubip-debug
 build-pubip-debug: bin/pubip-debug ## Build the pubip CLI with debug profiling
 
+# --- ddns-admin CLI ---
+
+bin/ddns-admin: $(ADMIN_SOURCES)
+	@mkdir -p bin
+	go build -o $@ ./cmd/ddns-admin
+
+.PHONY: build-admin
+build-admin: bin/ddns-admin ## Build the ddns-admin CLI
+
 .PHONY: build
-build: build-lambda build-pubip ## Build all artifacts
+build: build-lambda build-pubip build-admin ## Build all artifacts
 
 # =============================================================================
 # Test
