@@ -136,8 +136,8 @@ resource "aws_lambda_function" "ddns_service" {
   runtime       = "provided.al2023"
   architectures = ["arm64"]
 
-  filename         = "${path.module}/../scripts/dist/ddns-service.zip"
-  source_code_hash = filebase64sha256("${path.module}/../scripts/dist/ddns-service.zip")
+  filename         = "${path.module}/../dist/ddns-service.zip"
+  source_code_hash = filebase64sha256("${path.module}/../dist/ddns-service.zip")
 
   memory_size = 128
   timeout     = 10

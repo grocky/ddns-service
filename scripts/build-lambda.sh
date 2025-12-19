@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-DIST_DIR="$SCRIPT_DIR/dist"
+DIST_DIR="$ROOT_DIR/dist"
 LAMBDA_ZIP_NAME="ddns-service.zip"
 
 echo "Building ddns-service-lambda..."

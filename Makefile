@@ -19,15 +19,15 @@ help: ## Print this help message
 
 .PHONY: clean
 clean: ## Clean build artifacts
-	rm -rf bin scripts/dist
+	rm -rf bin dist
 
 # --- Lambda ---
 
-scripts/dist/ddns-service.zip: $(LAMBDA_SOURCES)
+dist/ddns-service.zip: $(LAMBDA_SOURCES)
 	./scripts/build-lambda.sh
 
 .PHONY: build-lambda
-build-lambda: scripts/dist/ddns-service.zip ## Build the Lambda deployment package
+build-lambda: dist/ddns-service.zip ## Build the Lambda deployment package
 
 # --- pubip CLI ---
 
@@ -76,12 +76,6 @@ test-endpoint: ## Test the deployed endpoint with a GET request
 .PHONY: deploy
 deploy: build-lambda ## Build and deploy Lambda via Terraform
 	cd terraform && terraform apply -auto-approve
-
-.PHONY: invoke
-invoke: ## Invoke the Lambda with test-payload.json
-	@mkdir -p logs
-	aws lambda invoke --region=us-east-1 --function-name=$(PROJECT_NAME) --payload file://test-payload.json logs/out.txt
-	@cat logs/out.txt | jq .
 
 # =============================================================================
 # Terraform
