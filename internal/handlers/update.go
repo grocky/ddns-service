@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -19,7 +20,7 @@ import (
 
 // Update handles IP update requests.
 // This is the main endpoint for DDNS clients to poll.
-// IP is automatically detected from the request context.
+// IP can be provided by the client or detected from the request context.
 // Rate limited to 2 IP changes per hour.
 func Update(
 	ctx context.Context,
@@ -58,17 +59,45 @@ func Update(
 		return response.MappingResponse{}, authErr
 	}
 
-	// Get client IP from request
-	ip := extractClientIP(request)
-	if ip == "" {
-		logger.Warn("could not determine client IP")
-		return response.MappingResponse{}, &response.RequestError{
-			Status:      http.StatusBadRequest,
-			Description: domain.ErrMissingIP.Error(),
+	// Resolve IP: prefer client-provided IP, fall back to server detection
+	var ip string
+	var clientProvidedIP bool
+
+	if req.IP != "" {
+		// Validate the provided IP
+		if net.ParseIP(req.IP) == nil {
+			logger.Warn("invalid IP provided", "ip", req.IP)
+			return response.MappingResponse{}, &response.RequestError{
+				Status:      http.StatusBadRequest,
+				Description: "invalid IP address format",
+			}
+		}
+		ip = req.IP
+		clientProvidedIP = true
+
+		// Log comparison for metrics/debugging
+		serverDetectedIP := extractClientIP(request)
+		if serverDetectedIP != "" && serverDetectedIP != ip {
+			logger.Warn("IP mismatch detected",
+				"clientProvided", ip,
+				"serverDetected", serverDetectedIP,
+				"ownerId", req.OwnerID,
+				"location", req.Location,
+			)
+		}
+	} else {
+		// Fall back to server detection (backward compatible)
+		ip = extractClientIP(request)
+		if ip == "" {
+			logger.Warn("could not determine client IP")
+			return response.MappingResponse{}, &response.RequestError{
+				Status:      http.StatusBadRequest,
+				Description: domain.ErrMissingIP.Error(),
+			}
 		}
 	}
 
-	logger.Info("client IP detected", "ip", ip)
+	logger.Info("client IP resolved", "ip", ip, "clientProvided", clientProvidedIP)
 
 	// Get existing mapping (may not exist yet)
 	existing, err := repo.Get(ctx, req.OwnerID, req.Location)

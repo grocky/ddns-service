@@ -19,7 +19,7 @@ Traditional solutions require:
 
 - **Automatic DNS Updates** - Updates Route53 A records when your IP changes
 - **Stable Subdomains** - Each location gets a permanent subdomain (e.g., `a3f8c2d1.grocky.net`)
-- **Simple REST API** - Poll the `/update` endpoint and let the service handle the rest
+- **Smart Client** - The `ddns-client` detects IP changes locally and updates the server
 - **Secure by default** - API key authentication protects your data
 - **Rate limited** - Prevents abuse with a maximum of 2 IP changes per hour
 - **Multi-location support** - Track IPs for multiple locations (home, office, cabin, etc.)
@@ -31,8 +31,8 @@ Traditional solutions require:
 ```mermaid
 flowchart TB
     subgraph clients["Your Devices"]
-        daemon["pubip CLI\n(scheduled daemon)"]
-        cron["cron job\n(curl)"]
+        daemon["ddns-client\n(daemon mode)"]
+        cron["ddns-client --cron\n(crontab)"]
         ha["Home Assistant\n(coming soon)"]
     end
 
@@ -46,15 +46,14 @@ flowchart TB
 
     subgraph endpoints["API Endpoints"]
         direction LR
-        e1["GET /public-ip"]
         e2["POST /owners"]
         e3["POST /update"]
         e4["GET /lookup/{owner}/{location}"]
     end
 
-    daemon -->|"poll /update\n(with API key)"| apigw
-    cron -->|"poll /update\n(with API key)"| apigw
-    ha -->|"poll /update\n(with API key)"| apigw
+    daemon -->|"IP changed?\nCall /update"| apigw
+    cron -->|"IP changed?\nCall /update"| apigw
+    ha -->|"IP changed?\nCall /update"| apigw
 
     apigw --> lambda
     lambda --> dynamodb
@@ -69,11 +68,51 @@ flowchart TB
 ## How It Works
 
 1. **Create an owner account** - Get your API key
-2. **Poll the `/update` endpoint** - The service detects your IP automatically
-3. **Automatic DNS updates** - When your IP changes, the service updates Route53
+2. **Run `ddns-client`** - The client detects your IP and calls the API when it changes
+3. **Automatic DNS updates** - When your IP changes, Route53 is updated automatically
 4. **Connect using your subdomain** - Use your stable hostname (e.g., `a3f8c2d1.grocky.net`)
 
 Each owner/location combination gets a deterministic subdomain based on a hash of `{ownerId}-{location}`. This subdomain never changes, even when your IP does.
+
+### Client-Server Interaction
+
+The `ddns-client` uses a smart update model that minimizes API calls by detecting IP changes locally:
+
+```mermaid
+sequenceDiagram
+    participant Client as ddns-client
+    participant IPServices as IP Detection Services
+    participant API as DDNS API
+    participant Route53 as Route53 DNS
+
+    loop Every 15 minutes (daemon) or on-demand (cron)
+        Client->>IPServices: Query multiple IP services
+        IPServices-->>Client: Consensus IP (e.g., 203.0.113.42)
+
+        alt IP unchanged from last check
+            Note over Client: Skip API call<br/>(saves bandwidth)
+        else IP changed or first run
+            Client->>API: POST /update<br/>{ownerId, location, ip}
+            API->>API: Validate API key
+            API->>API: Check rate limit (2/hour)
+
+            alt Rate limit OK
+                API->>Route53: Upsert A record
+                Route53-->>API: Success
+                API-->>Client: {subdomain, ip, changed: true}
+                Note over Client: Save IP hash to state
+            else Rate limit exceeded
+                API-->>Client: 429 Too Many Requests<br/>Retry-After: N seconds
+            end
+        end
+    end
+```
+
+**Key benefits of this model:**
+- **Reduced API calls** - Only calls the API when IP actually changes
+- **Reliable IP detection** - Uses consensus from multiple services (icanhazip, ipify, etc.)
+- **Offline resilience** - State persisted to disk in cron mode survives restarts
+- **Rate limit friendly** - Local change detection prevents hitting rate limits
 
 ## API Reference
 
@@ -87,26 +126,11 @@ Authorization: Bearer ddns_sk_your_api_key_here
 
 | Endpoint | Authentication | Rate Limited |
 |----------|----------------|--------------|
-| `GET /public-ip` | Not required | No |
 | `POST /owners` | Not required | No |
 | `POST /owners/{id}/recover` | Not required | No |
 | `POST /owners/{id}/rotate` | Required | No |
 | `POST /update` | Required | Yes (2/hour) |
 | `GET /lookup/{owner}/{location}` | Required | No |
-
-### Get Your Public IP
-
-Returns the public IP address of the caller. No authentication required.
-
-```bash
-curl https://ddns.grocky.net/public-ip
-```
-
-```json
-{
-  "publicIp": "203.0.113.42"
-}
-```
 
 ### Create an Owner Account
 
@@ -130,17 +154,24 @@ curl -X POST https://ddns.grocky.net/owners \
 }
 ```
 
-### Update DNS (Poll Endpoint)
+### Update DNS
 
-Poll this endpoint to update your DNS record. The service automatically:
-1. Detects your public IP from the request
-2. Checks if it has changed since the last update
-3. Updates Route53 if needed
-4. Returns your stable subdomain
+Update your DNS record when your IP changes. The client can optionally send its detected IP, or the server will detect it from the request.
 
 **Rate limited to 2 IP changes per hour.**
 
 ```bash
+# Client sends detected IP (recommended - used by ddns-client)
+curl -X POST https://ddns.grocky.net/update \
+  -H "Authorization: Bearer ddns_sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ownerId": "my-home-lab",
+    "location": "home",
+    "ip": "203.0.113.42"
+  }'
+
+# Or let server detect IP (backward compatible)
 curl -X POST https://ddns.grocky.net/update \
   -H "Authorization: Bearer ddns_sk_your_api_key_here" \
   -H "Content-Type: application/json" \
@@ -238,40 +269,29 @@ curl -X POST https://ddns.grocky.net/owners \
 
 Save the `apiKey` from the response - you'll need it for all future requests!
 
-**Step 2: Set up automatic polling with cron**
+**Step 2: Install and run the ddns-client**
+
+```bash
+# Build the client
+make build-client
+
+# Set environment variables
+export DDNS_API_KEY=ddns_sk_your_api_key_here
+export DDNS_OWNER=my-home
+export DDNS_LOCATION=home
+
+# Run as daemon (default - checks every 15 minutes)
+./bin/ddns-client
+
+# Or run once for crontab
+./bin/ddns-client --cron
+```
+
+**Or use crontab with the --cron flag:**
 
 ```bash
 # Add to crontab (runs every 15 minutes)
-*/15 * * * * curl -s -X POST https://ddns.grocky.net/update \
-  -H "Authorization: Bearer ddns_sk_your_api_key_here" \
-  -H "Content-Type: application/json" \
-  -d '{"ownerId":"my-home","location":"home"}' > /dev/null
-```
-
-**Or create a simple shell script:**
-
-```bash
-#!/bin/bash
-# save as: update-ddns.sh
-
-OWNER_ID="my-home"
-LOCATION="home"
-API_KEY="ddns_sk_your_api_key_here"
-
-response=$(curl -s -X POST https://ddns.grocky.net/update \
-  -H "Authorization: Bearer ${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d "{\"ownerId\":\"${OWNER_ID}\",\"location\":\"${LOCATION}\"}")
-
-# Extract subdomain and check if changed
-subdomain=$(echo "$response" | jq -r '.subdomain')
-changed=$(echo "$response" | jq -r '.changed')
-
-if [ "$changed" = "true" ]; then
-    echo "IP updated! Your subdomain: $subdomain"
-else
-    echo "IP unchanged. Your subdomain: $subdomain"
-fi
+*/15 * * * * DDNS_API_KEY=xxx DDNS_OWNER=my-home DDNS_LOCATION=home /usr/local/bin/ddns-client --cron
 ```
 
 **Step 3: Connect using your subdomain**
@@ -282,21 +302,35 @@ Once set up, you can always connect to your home network using your stable subdo
 ssh user@6abf7de6.grocky.net
 ```
 
-### Option 2: Use the pubip CLI
+### Option 2: Use the ddns-client CLI
 
-The `pubip` CLI tool queries multiple IP detection services and uses consensus to reliably determine your public IP.
+The `ddns-client` is a full-featured DDNS client that:
+- Queries multiple IP detection services with consensus for reliability
+- Detects IP changes locally (only calls API when IP changes)
+- Supports both daemon mode (continuous) and cron mode (one-shot)
+- Works with both IPv4 and IPv6
 
 ```bash
-# Build the CLI
-make build-pubip
+# Build the client
+make build-client
 
-# Get your IPv4 address (default)
-./bin/pubip
-203.0.113.42
+# Daemon mode (runs continuously, checks every 15 minutes)
+export DDNS_API_KEY=ddns_sk_your_api_key_here
+export DDNS_OWNER=myuser
+export DDNS_LOCATION=home
+./bin/ddns-client
 
-# Get your IPv6 address
-./bin/pubip -6
-2601:123:4567:89ab::1
+# Cron mode (runs once, for crontab)
+./bin/ddns-client --cron
+
+# IPv6 mode
+./bin/ddns-client -6
+
+# Custom check interval
+./bin/ddns-client --interval 5m
+
+# Verbose logging
+./bin/ddns-client --verbose
 ```
 
 ## Use Cases
@@ -312,11 +346,14 @@ curl -X POST https://ddns.grocky.net/owners \
   -d '{"ownerId":"homelab","email":"you@example.com"}'
 # Save the API key!
 
-# On your home server (via cron)
-*/15 * * * * curl -s -X POST https://ddns.grocky.net/update \
-  -H "Authorization: Bearer ddns_sk_your_api_key" \
-  -H "Content-Type: application/json" \
-  -d '{"ownerId":"homelab","location":"primary"}' > /dev/null
+# On your home server - run ddns-client as a daemon
+export DDNS_API_KEY=ddns_sk_your_api_key
+export DDNS_OWNER=homelab
+export DDNS_LOCATION=primary
+./bin/ddns-client
+
+# Or add to crontab for one-shot updates
+*/15 * * * * DDNS_API_KEY=xxx DDNS_OWNER=homelab DDNS_LOCATION=primary /usr/local/bin/ddns-client --cron
 
 # From your laptop, anywhere in the world - use your stable subdomain
 ssh user@a1b2c3d4.grocky.net
@@ -332,18 +369,11 @@ curl -X POST https://ddns.grocky.net/owners \
   -H "Content-Type: application/json" \
   -d '{"ownerId":"acme-corp","email":"admin@acme.com"}'
 
-# Set up polling at each location
-# At headquarters:
-curl -X POST https://ddns.grocky.net/update \
-  -H "Authorization: Bearer ddns_sk_your_api_key" \
-  -H "Content-Type: application/json" \
-  -d '{"ownerId":"acme-corp","location":"headquarters"}'
+# At headquarters - run ddns-client with location=headquarters
+DDNS_API_KEY=xxx DDNS_OWNER=acme-corp DDNS_LOCATION=headquarters ./bin/ddns-client
 
-# At warehouse:
-curl -X POST https://ddns.grocky.net/update \
-  -H "Authorization: Bearer ddns_sk_your_api_key" \
-  -H "Content-Type: application/json" \
-  -d '{"ownerId":"acme-corp","location":"warehouse"}'
+# At warehouse - run ddns-client with location=warehouse
+DDNS_API_KEY=xxx DDNS_OWNER=acme-corp DDNS_LOCATION=warehouse ./bin/ddns-client
 
 # Each location gets its own stable subdomain
 # headquarters: abc12345.grocky.net

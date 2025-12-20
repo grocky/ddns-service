@@ -16,10 +16,11 @@ type IPMapping struct {
 }
 
 // UpdateRequest is the request body for updating a DNS mapping.
-// IP is detected automatically from the request context.
+// IP can optionally be provided by the client; if not, it's detected from the request.
 type UpdateRequest struct {
 	OwnerID  string `json:"ownerId"`
 	Location string `json:"location"`
+	IP       string `json:"ip,omitempty"`
 }
 
 // Validate checks if the update request is valid.

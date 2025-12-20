@@ -74,15 +74,6 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	logger.Info("request received", "method", method, "route", route)
 
-	// GET /public-ip - doesn't need any services
-	if method == http.MethodGet && route == "/public-ip" {
-		resp, reqErr := handlers.GetPublicIP(request, logger)
-		if reqErr != nil {
-			return clientError(reqErr)
-		}
-		return jsonResponse(resp.Status, resp.Body)
-	}
-
 	// Initialize services for routes that need them
 	if err := initServices(ctx); err != nil {
 		return serverError(fmt.Errorf("failed to initialize: %w", err))

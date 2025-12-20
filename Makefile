@@ -7,7 +7,7 @@ PROJECT_NAME := ddns-service
 
 # Source file dependencies
 LAMBDA_SOURCES := $(shell find cmd/ddns-service-lambda internal pkg -name "*.go")
-PUBIP_SOURCES  := $(shell find cmd/pubip pkg -name "*.go")
+CLIENT_SOURCES := $(shell find cmd/ddns-client internal/client internal/state pkg -name "*.go")
 ADMIN_SOURCES  := $(shell find cmd/ddns-admin internal -name "*.go")
 
 help: ## Print this help message
@@ -29,21 +29,21 @@ dist/ddns-service.zip: $(LAMBDA_SOURCES)
 .PHONY: build-lambda
 build-lambda: dist/ddns-service.zip ## Build the Lambda deployment package
 
-# --- pubip CLI ---
+# --- ddns-client CLI ---
 
-bin/pubip: $(PUBIP_SOURCES)
+bin/ddns-client: $(CLIENT_SOURCES)
 	@mkdir -p bin
-	go build -o $@ ./cmd/pubip
+	go build -o $@ ./cmd/ddns-client
 
-.PHONY: build-pubip
-build-pubip: bin/pubip ## Build the pubip CLI
+.PHONY: build-client
+build-client: bin/ddns-client ## Build the ddns-client CLI
 
-bin/pubip-debug: $(PUBIP_SOURCES)
+bin/ddns-client-debug: $(CLIENT_SOURCES)
 	@mkdir -p bin
-	go build -tags=debug -o $@ ./cmd/pubip
+	go build -tags=debug -o $@ ./cmd/ddns-client
 
-.PHONY: build-pubip-debug
-build-pubip-debug: bin/pubip-debug ## Build the pubip CLI with debug profiling
+.PHONY: build-client-debug
+build-client-debug: bin/ddns-client-debug ## Build the ddns-client CLI with debug profiling
 
 # --- ddns-admin CLI ---
 
@@ -55,7 +55,7 @@ bin/ddns-admin: $(ADMIN_SOURCES)
 build-admin: bin/ddns-admin ## Build the ddns-admin CLI
 
 .PHONY: build
-build: build-lambda build-pubip build-admin ## Build all artifacts
+build: build-lambda build-client build-admin ## Build all artifacts
 
 # =============================================================================
 # Test
@@ -64,10 +64,6 @@ build: build-lambda build-pubip build-admin ## Build all artifacts
 .PHONY: test
 test: ## Run all tests
 	go test ./...
-
-.PHONY: test-endpoint
-test-endpoint: ## Test the deployed endpoint with a GET request
-	curl -s https://ddns.grocky.net/public-ip | jq .
 
 # =============================================================================
 # Deploy

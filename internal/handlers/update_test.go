@@ -411,3 +411,131 @@ func TestUpdate_MultipleIPsInForwardedFor(t *testing.T) {
 	assert.Equal(t, "203.0.113.50", savedIP)
 	assert.Equal(t, "203.0.113.50", resp.Body.IP)
 }
+
+func TestUpdate_ClientProvidedIP(t *testing.T) {
+	ctx := context.Background()
+	logger := newTestLogger()
+
+	apiKey := "ddns_sk_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop"
+	apiKeyHash := auth.HashAPIKey(apiKey)
+
+	var savedIP string
+	repo := &mockRepository{
+		getOwnerFunc: func(ctx context.Context, ownerID string) (*domain.Owner, error) {
+			return &domain.Owner{
+				OwnerID:    "test-owner",
+				Email:      "user@example.com",
+				APIKeyHash: apiKeyHash,
+				CreatedAt:  time.Now().UTC(),
+			}, nil
+		},
+		getFunc: func(ctx context.Context, ownerID, location string) (*domain.IPMapping, error) {
+			return nil, domain.ErrMappingNotFound
+		},
+		putFunc: func(ctx context.Context, mapping domain.IPMapping) error {
+			savedIP = mapping.IP
+			return nil
+		},
+	}
+
+	dnsSvc := &mockDNSService{}
+
+	// Client provides IP in request body
+	request := events.APIGatewayProxyRequest{
+		Headers: map[string]string{
+			"Authorization":   "Bearer " + apiKey,
+			"X-Forwarded-For": "10.0.0.1", // Server detects different IP
+		},
+		Body: `{"ownerId":"test-owner","location":"home","ip":"203.0.113.42"}`,
+	}
+
+	resp, err := Update(ctx, request, repo, dnsSvc, logger)
+
+	assert.Assert(t, err == nil)
+	assert.Equal(t, http.StatusOK, resp.Status)
+	// Should use the client-provided IP, not the server-detected one
+	assert.Equal(t, "203.0.113.42", savedIP)
+	assert.Equal(t, "203.0.113.42", resp.Body.IP)
+}
+
+func TestUpdate_ClientProvidedIP_Invalid(t *testing.T) {
+	ctx := context.Background()
+	logger := newTestLogger()
+
+	apiKey := "ddns_sk_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop"
+	apiKeyHash := auth.HashAPIKey(apiKey)
+
+	repo := &mockRepository{
+		getOwnerFunc: func(ctx context.Context, ownerID string) (*domain.Owner, error) {
+			return &domain.Owner{
+				OwnerID:    "test-owner",
+				Email:      "user@example.com",
+				APIKeyHash: apiKeyHash,
+				CreatedAt:  time.Now().UTC(),
+			}, nil
+		},
+	}
+
+	dnsSvc := &mockDNSService{}
+
+	// Client provides invalid IP
+	request := events.APIGatewayProxyRequest{
+		Headers: map[string]string{
+			"Authorization":   "Bearer " + apiKey,
+			"X-Forwarded-For": "10.0.0.1",
+		},
+		Body: `{"ownerId":"test-owner","location":"home","ip":"not-an-ip"}`,
+	}
+
+	resp, err := Update(ctx, request, repo, dnsSvc, logger)
+
+	assert.Assert(t, err != nil)
+	assert.Equal(t, http.StatusBadRequest, err.Status)
+	assert.Equal(t, "invalid IP address format", err.Description)
+	assert.Equal(t, 0, resp.Status)
+}
+
+func TestUpdate_ClientProvidedIPv6(t *testing.T) {
+	ctx := context.Background()
+	logger := newTestLogger()
+
+	apiKey := "ddns_sk_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop"
+	apiKeyHash := auth.HashAPIKey(apiKey)
+
+	var savedIP string
+	repo := &mockRepository{
+		getOwnerFunc: func(ctx context.Context, ownerID string) (*domain.Owner, error) {
+			return &domain.Owner{
+				OwnerID:    "test-owner",
+				Email:      "user@example.com",
+				APIKeyHash: apiKeyHash,
+				CreatedAt:  time.Now().UTC(),
+			}, nil
+		},
+		getFunc: func(ctx context.Context, ownerID, location string) (*domain.IPMapping, error) {
+			return nil, domain.ErrMappingNotFound
+		},
+		putFunc: func(ctx context.Context, mapping domain.IPMapping) error {
+			savedIP = mapping.IP
+			return nil
+		},
+	}
+
+	dnsSvc := &mockDNSService{}
+
+	// Client provides IPv6 address
+	request := events.APIGatewayProxyRequest{
+		Headers: map[string]string{
+			"Authorization":   "Bearer " + apiKey,
+			"X-Forwarded-For": "10.0.0.1",
+		},
+		Body: `{"ownerId":"test-owner","location":"home","ip":"2001:db8::1"}`,
+	}
+
+	resp, err := Update(ctx, request, repo, dnsSvc, logger)
+
+	assert.Assert(t, err == nil)
+	assert.Equal(t, http.StatusOK, resp.Status)
+	assert.Equal(t, "2001:db8::1", savedIP)
+	assert.Equal(t, "2001:db8::1", resp.Body.IP)
+}
