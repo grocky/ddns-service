@@ -21,13 +21,20 @@ type Config struct {
 	IPv6     bool
 	Verbose  bool
 	Cron     bool
+
+	// ACME mode flags (for certbot integration)
+	ACMEAuth        bool
+	ACMECleanup     bool
+	Subdomain       string
+	PropagationWait time.Duration
 }
 
 // DefaultConfig returns configuration with default values.
 func DefaultConfig() Config {
 	return Config{
-		APIURL:   "https://ddns.grocky.net",
-		Interval: 15 * time.Minute,
+		APIURL:          "https://ddns.grocky.net",
+		Interval:        15 * time.Minute,
+		PropagationWait: 60 * time.Second,
 	}
 }
 
@@ -46,6 +53,12 @@ func LoadConfig() (Config, error) {
 	ipv6 := flag.Bool("6", false, "Use IPv6 instead of IPv4")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	cron := flag.Bool("cron", false, "Run once and exit (for crontab)")
+
+	// ACME mode flags
+	acmeAuth := flag.Bool("acme-auth", false, "Run as certbot auth hook (creates TXT record)")
+	acmeCleanup := flag.Bool("acme-cleanup", false, "Run as certbot cleanup hook (deletes TXT record)")
+	subdomain := flag.String("subdomain", "", "Override subdomain (for wildcard certs)")
+	propagationWait := flag.Duration("propagation-wait", cfg.PropagationWait, "DNS propagation wait time")
 
 	flag.Parse()
 
@@ -72,6 +85,12 @@ func LoadConfig() (Config, error) {
 	cfg.Verbose = *verbose
 	cfg.Cron = *cron
 
+	// ACME mode settings
+	cfg.ACMEAuth = *acmeAuth
+	cfg.ACMECleanup = *acmeCleanup
+	cfg.Subdomain = *subdomain
+	cfg.PropagationWait = *propagationWait
+
 	return cfg, nil
 }
 
@@ -86,5 +105,26 @@ func (c Config) Validate() error {
 	if c.Location == "" {
 		return errors.New("location is required (set DDNS_LOCATION or use --location)")
 	}
+
+	// Check for conflicting modes
+	modeCount := 0
+	if c.Cron {
+		modeCount++
+	}
+	if c.ACMEAuth {
+		modeCount++
+	}
+	if c.ACMECleanup {
+		modeCount++
+	}
+	if modeCount > 1 {
+		return errors.New("--cron, --acme-auth, and --acme-cleanup are mutually exclusive")
+	}
+
 	return nil
+}
+
+// IsACMEMode returns true if running in any ACME mode.
+func (c Config) IsACMEMode() bool {
+	return c.ACMEAuth || c.ACMECleanup
 }

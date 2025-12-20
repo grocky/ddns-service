@@ -40,12 +40,23 @@ func main() {
 		Level: logLevel,
 	}))
 
-	if cfg.Cron {
+	switch {
+	case cfg.ACMEAuth:
+		if err := runACMEAuth(cfg, logger); err != nil {
+			logger.Error("ACME auth failed", "error", err)
+			os.Exit(1)
+		}
+	case cfg.ACMECleanup:
+		if err := runACMECleanup(cfg, logger); err != nil {
+			logger.Error("ACME cleanup failed", "error", err)
+			os.Exit(1)
+		}
+	case cfg.Cron:
 		if err := runCron(cfg, logger); err != nil {
 			logger.Error("update failed", "error", err)
 			os.Exit(1)
 		}
-	} else {
+	default:
 		if err := runDaemon(cfg, logger); err != nil {
 			logger.Error("daemon failed", "error", err)
 			os.Exit(1)
@@ -62,11 +73,13 @@ Usage:
 
 By default, runs as a daemon checking for IP changes periodically.
 Use --cron for one-shot mode (suitable for crontab).
+Use --acme-auth and --acme-cleanup for certbot integration.
 
 Environment Variables:
-  DDNS_API_KEY    API key for authentication (preferred over --api-key)
-  DDNS_OWNER      Owner ID
-  DDNS_LOCATION   Location name
+  DDNS_API_KEY         API key for authentication (preferred over --api-key)
+  DDNS_OWNER           Owner ID
+  DDNS_LOCATION        Location name
+  CERTBOT_VALIDATION   TXT value (set by certbot in --acme-auth mode)
 
 Flags:`)
 		flag.PrintDefaults()
@@ -82,7 +95,13 @@ Examples:
   ddns-client --cron
 
   # IPv6 mode with verbose logging
-  ddns-client -6 --verbose`)
+  ddns-client -6 --verbose
+
+  # Certbot integration (Let's Encrypt)
+  certbot certonly --manual --preferred-challenges dns \
+    --manual-auth-hook "ddns-client --acme-auth" \
+    --manual-cleanup-hook "ddns-client --acme-cleanup" \
+    -d "*.home.ddns.example.com"`)
 	}
 }
 
@@ -255,5 +274,81 @@ func checkAndUpdate(ctx context.Context, cfg Config, apiClient *client.Client, l
 		logger.Debug("DNS unchanged (server already had this IP)")
 	}
 
+	return nil
+}
+
+// runACMEAuth runs as a certbot auth hook to create a TXT record.
+// Reads CERTBOT_VALIDATION from environment and creates the challenge record.
+func runACMEAuth(cfg Config, logger *slog.Logger) error {
+	txtValue := os.Getenv("CERTBOT_VALIDATION")
+	if txtValue == "" {
+		return fmt.Errorf("CERTBOT_VALIDATION environment variable not set (is this running as a certbot hook?)")
+	}
+
+	logger.Info("creating ACME challenge",
+		"owner", cfg.Owner,
+		"location", cfg.Location,
+	)
+
+	// Create API client
+	apiClient := client.New(client.Config{
+		APIURL: cfg.APIURL,
+		APIKey: cfg.APIKey,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Create the ACME challenge TXT record
+	resp, err := apiClient.CreateACMEChallenge(ctx, cfg.Owner, cfg.Location, txtValue)
+	if err != nil {
+		return fmt.Errorf("failed to create challenge: %w", err)
+	}
+
+	logger.Info("ACME challenge created",
+		"txtRecord", resp.TxtRecord,
+		"txtValue", resp.TxtValue,
+		"expiresAt", resp.ExpiresAt,
+	)
+
+	// Wait for DNS propagation
+	logger.Info("waiting for DNS propagation", "wait", cfg.PropagationWait)
+	time.Sleep(cfg.PropagationWait)
+
+	logger.Info("ACME auth hook completed successfully")
+	return nil
+}
+
+// runACMECleanup runs as a certbot cleanup hook to delete a TXT record.
+func runACMECleanup(cfg Config, logger *slog.Logger) error {
+	logger.Info("deleting ACME challenge",
+		"owner", cfg.Owner,
+		"location", cfg.Location,
+	)
+
+	// Create API client
+	apiClient := client.New(client.Config{
+		APIURL: cfg.APIURL,
+		APIKey: cfg.APIKey,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Delete the ACME challenge TXT record
+	resp, err := apiClient.DeleteACMEChallenge(ctx, cfg.Owner, cfg.Location)
+	if err != nil {
+		return fmt.Errorf("failed to delete challenge: %w", err)
+	}
+
+	if resp.Deleted {
+		logger.Info("ACME challenge deleted",
+			"txtRecord", resp.TxtRecord,
+		)
+	} else {
+		logger.Warn("challenge was not found (may have already expired)")
+	}
+
+	logger.Info("ACME cleanup hook completed successfully")
 	return nil
 }
