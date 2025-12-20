@@ -58,6 +58,38 @@ type MessageBody struct {
 	Message string `json:"message"`
 }
 
+// ACMEChallengeResponse represents a response for creating an ACME challenge.
+type ACMEChallengeResponse struct {
+	Status int
+	Body   ACMEChallengeBody
+}
+
+// ACMEChallengeBody is the JSON body for an ACME challenge response.
+type ACMEChallengeBody struct {
+	OwnerID   string `json:"ownerId"`
+	Location  string `json:"location"`
+	Subdomain string `json:"subdomain"`
+	TxtRecord string `json:"txtRecord"`
+	TxtValue  string `json:"txtValue"`
+	CreatedAt string `json:"createdAt"`
+	ExpiresAt string `json:"expiresAt"`
+}
+
+// ACMEDeleteResponse represents a response for deleting an ACME challenge.
+type ACMEDeleteResponse struct {
+	Status int
+	Body   ACMEDeleteBody
+}
+
+// ACMEDeleteBody is the JSON body for an ACME delete response.
+type ACMEDeleteBody struct {
+	OwnerID   string `json:"ownerId"`
+	Location  string `json:"location"`
+	Subdomain string `json:"subdomain"`
+	TxtRecord string `json:"txtRecord"`
+	Deleted   bool   `json:"deleted"`
+}
+
 // ErrorBody is the JSON body for error responses.
 type ErrorBody struct {
 	Description string `json:"description"`

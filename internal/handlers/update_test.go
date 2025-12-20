@@ -16,8 +16,10 @@ import (
 
 // mockDNSService is a mock implementation of dns.Service for testing.
 type mockDNSService struct {
-	upsertRecordFunc func(ctx context.Context, subdomain, ip string) error
-	deleteRecordFunc func(ctx context.Context, subdomain string) error
+	upsertRecordFunc    func(ctx context.Context, subdomain, ip string) error
+	deleteRecordFunc    func(ctx context.Context, subdomain string) error
+	upsertTXTRecordFunc func(ctx context.Context, name, value string) error
+	deleteTXTRecordFunc func(ctx context.Context, name, value string) error
 }
 
 func (m *mockDNSService) UpsertRecord(ctx context.Context, subdomain, ip string) error {
@@ -30,6 +32,20 @@ func (m *mockDNSService) UpsertRecord(ctx context.Context, subdomain, ip string)
 func (m *mockDNSService) DeleteRecord(ctx context.Context, subdomain string) error {
 	if m.deleteRecordFunc != nil {
 		return m.deleteRecordFunc(ctx, subdomain)
+	}
+	return nil
+}
+
+func (m *mockDNSService) UpsertTXTRecord(ctx context.Context, name, value string) error {
+	if m.upsertTXTRecordFunc != nil {
+		return m.upsertTXTRecordFunc(ctx, name, value)
+	}
+	return nil
+}
+
+func (m *mockDNSService) DeleteTXTRecord(ctx context.Context, name, value string) error {
+	if m.deleteTXTRecordFunc != nil {
+		return m.deleteTXTRecordFunc(ctx, name, value)
 	}
 	return nil
 }

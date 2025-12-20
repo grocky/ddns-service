@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	mappingsTableName = "DdnsServiceIpMapping"
-	ownersTableName   = "DdnsServiceOwners"
+	mappingsTableName       = "DdnsServiceIpMapping"
+	ownersTableName         = "DdnsServiceOwners"
+	acmeChallengesTableName = "DdnsServiceAcmeChallenges"
 )
 
 // DynamoDBClient defines the interface for DynamoDB operations we use.
@@ -22,6 +23,7 @@ type DynamoDBClient interface {
 	PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 	UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
+	DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
 }
 
 // DynamoDBRepository implements Repository using DynamoDB.
@@ -184,6 +186,96 @@ func (r *DynamoDBRepository) UpdateOwnerKey(ctx context.Context, ownerID, newKey
 	}
 
 	r.logger.Info("owner key updated", "ownerId", ownerID)
+	return nil
+}
+
+// PutChallenge creates or updates an ACME challenge in DynamoDB.
+func (r *DynamoDBRepository) PutChallenge(ctx context.Context, challenge domain.ACMEChallenge) error {
+	item, err := attributevalue.MarshalMap(challenge)
+	if err != nil {
+		r.logger.Error("failed to marshal challenge", "error", err)
+		return err
+	}
+
+	input := &dynamodb.PutItemInput{
+		TableName: aws.String(acmeChallengesTableName),
+		Item:      item,
+	}
+
+	_, err = r.client.PutItem(ctx, input)
+	if err != nil {
+		r.logger.Error("failed to put challenge",
+			"error", err,
+			"ownerId", challenge.OwnerID,
+			"location", challenge.LocationName,
+		)
+		return err
+	}
+
+	r.logger.Info("challenge saved",
+		"ownerId", challenge.OwnerID,
+		"location", challenge.LocationName,
+	)
+	return nil
+}
+
+// GetChallenge retrieves an ACME challenge from DynamoDB.
+func (r *DynamoDBRepository) GetChallenge(ctx context.Context, ownerID, location string) (*domain.ACMEChallenge, error) {
+	input := &dynamodb.GetItemInput{
+		TableName: aws.String(acmeChallengesTableName),
+		Key: map[string]types.AttributeValue{
+			"OwnerId":      &types.AttributeValueMemberS{Value: ownerID},
+			"LocationName": &types.AttributeValueMemberS{Value: location},
+		},
+	}
+
+	result, err := r.client.GetItem(ctx, input)
+	if err != nil {
+		r.logger.Error("failed to get challenge",
+			"error", err,
+			"ownerId", ownerID,
+			"location", location,
+		)
+		return nil, err
+	}
+
+	if result.Item == nil {
+		return nil, domain.ErrChallengeNotFound
+	}
+
+	var challenge domain.ACMEChallenge
+	if err := attributevalue.UnmarshalMap(result.Item, &challenge); err != nil {
+		r.logger.Error("failed to unmarshal challenge", "error", err)
+		return nil, err
+	}
+
+	return &challenge, nil
+}
+
+// DeleteChallenge removes an ACME challenge from DynamoDB.
+func (r *DynamoDBRepository) DeleteChallenge(ctx context.Context, ownerID, location string) error {
+	input := &dynamodb.DeleteItemInput{
+		TableName: aws.String(acmeChallengesTableName),
+		Key: map[string]types.AttributeValue{
+			"OwnerId":      &types.AttributeValueMemberS{Value: ownerID},
+			"LocationName": &types.AttributeValueMemberS{Value: location},
+		},
+	}
+
+	_, err := r.client.DeleteItem(ctx, input)
+	if err != nil {
+		r.logger.Error("failed to delete challenge",
+			"error", err,
+			"ownerId", ownerID,
+			"location", location,
+		)
+		return err
+	}
+
+	r.logger.Info("challenge deleted",
+		"ownerId", ownerID,
+		"location", location,
+	)
 	return nil
 }
 

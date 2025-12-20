@@ -25,3 +25,8 @@ func GenerateSubdomain(ownerID, location string) string {
 func FormatFQDN(subdomain string) string {
 	return fmt.Sprintf("%s.%s", subdomain, RootDomain)
 }
+
+// BuildACMEChallengeName returns the TXT record name for an ACME challenge.
+func BuildACMEChallengeName(subdomain string) string {
+	return fmt.Sprintf("_acme-challenge.%s", subdomain)
+}

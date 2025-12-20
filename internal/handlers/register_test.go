@@ -15,11 +15,14 @@ import (
 
 // mockRepository is a mock implementation of repository.Repository for testing.
 type mockRepository struct {
-	getOwnerFunc       func(ctx context.Context, ownerID string) (*domain.Owner, error)
-	createOwnerFunc    func(ctx context.Context, owner domain.Owner) error
-	updateOwnerKeyFunc func(ctx context.Context, ownerID, newKeyHash string) error
-	putFunc            func(ctx context.Context, mapping domain.IPMapping) error
-	getFunc            func(ctx context.Context, ownerID, location string) (*domain.IPMapping, error)
+	getOwnerFunc        func(ctx context.Context, ownerID string) (*domain.Owner, error)
+	createOwnerFunc     func(ctx context.Context, owner domain.Owner) error
+	updateOwnerKeyFunc  func(ctx context.Context, ownerID, newKeyHash string) error
+	putFunc             func(ctx context.Context, mapping domain.IPMapping) error
+	getFunc             func(ctx context.Context, ownerID, location string) (*domain.IPMapping, error)
+	putChallengeFunc    func(ctx context.Context, challenge domain.ACMEChallenge) error
+	getChallengeFunc    func(ctx context.Context, ownerID, location string) (*domain.ACMEChallenge, error)
+	deleteChallengeFunc func(ctx context.Context, ownerID, location string) error
 }
 
 func (m *mockRepository) GetOwner(ctx context.Context, ownerID string) (*domain.Owner, error) {
@@ -55,6 +58,27 @@ func (m *mockRepository) Get(ctx context.Context, ownerID, location string) (*do
 		return m.getFunc(ctx, ownerID, location)
 	}
 	return nil, domain.ErrMappingNotFound
+}
+
+func (m *mockRepository) PutChallenge(ctx context.Context, challenge domain.ACMEChallenge) error {
+	if m.putChallengeFunc != nil {
+		return m.putChallengeFunc(ctx, challenge)
+	}
+	return nil
+}
+
+func (m *mockRepository) GetChallenge(ctx context.Context, ownerID, location string) (*domain.ACMEChallenge, error) {
+	if m.getChallengeFunc != nil {
+		return m.getChallengeFunc(ctx, ownerID, location)
+	}
+	return nil, domain.ErrChallengeNotFound
+}
+
+func (m *mockRepository) DeleteChallenge(ctx context.Context, ownerID, location string) error {
+	if m.deleteChallengeFunc != nil {
+		return m.deleteChallengeFunc(ctx, ownerID, location)
+	}
+	return nil
 }
 
 func TestRegister_Success_AutoIP(t *testing.T) {

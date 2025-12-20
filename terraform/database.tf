@@ -46,3 +46,31 @@ resource "aws_dynamodb_table" "owners" {
     Application = "ddns-service"
   }
 }
+
+resource "aws_dynamodb_table" "acme_challenges" {
+  name         = "DdnsServiceAcmeChallenges"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "OwnerId"
+  range_key    = "LocationName"
+
+  attribute {
+    name = "OwnerId"
+    type = "S"
+  }
+
+  attribute {
+    name = "LocationName"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "TTL"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "DdnsServiceAcmeChallenges"
+    Environment = var.environment
+    Application = "ddns-service"
+  }
+}

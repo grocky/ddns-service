@@ -38,4 +38,19 @@ var (
 
 	// ErrMissingIP is returned when the client IP cannot be determined.
 	ErrMissingIP = errors.New("could not determine client IP")
+
+	// ErrMissingTxtValue is returned when txtValue is empty.
+	ErrMissingTxtValue = errors.New("txtValue is required")
+
+	// ErrInvalidTxtValue is returned when txtValue format is invalid.
+	ErrInvalidTxtValue = errors.New("invalid txtValue format")
+
+	// ErrChallengeNotFound is returned when an ACME challenge doesn't exist.
+	ErrChallengeNotFound = errors.New("challenge not found")
+
+	// ErrChallengeExists is returned when an ACME challenge already exists.
+	ErrChallengeExists = errors.New("challenge already exists")
+
+	// ErrACMERateLimitExceeded is returned when too many ACME challenges are created.
+	ErrACMERateLimitExceeded = errors.New("rate limit exceeded: maximum 10 challenges per hour")
 )

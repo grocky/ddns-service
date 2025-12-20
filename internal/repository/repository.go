@@ -23,6 +23,15 @@ type Repository interface {
 
 	// UpdateOwnerKey updates the API key hash for an owner.
 	UpdateOwnerKey(ctx context.Context, ownerID, newKeyHash string) error
+
+	// PutChallenge creates or updates an ACME challenge.
+	PutChallenge(ctx context.Context, challenge domain.ACMEChallenge) error
+
+	// GetChallenge retrieves an ACME challenge by owner ID and location.
+	GetChallenge(ctx context.Context, ownerID, location string) (*domain.ACMEChallenge, error)
+
+	// DeleteChallenge removes an ACME challenge.
+	DeleteChallenge(ctx context.Context, ownerID, location string) error
 }
 
 // IsOwnerNotFound returns true if the error is ErrOwnerNotFound.
@@ -38,4 +47,9 @@ func IsOwnerExists(err error) bool {
 // IsMappingNotFound returns true if the error is ErrMappingNotFound.
 func IsMappingNotFound(err error) bool {
 	return errors.Is(err, domain.ErrMappingNotFound)
+}
+
+// IsChallengeNotFound returns true if the error is ErrChallengeNotFound.
+func IsChallengeNotFound(err error) bool {
+	return errors.Is(err, domain.ErrChallengeNotFound)
 }

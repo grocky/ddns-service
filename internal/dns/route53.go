@@ -22,6 +22,12 @@ type Service interface {
 
 	// DeleteRecord removes the A record for the given subdomain.
 	DeleteRecord(ctx context.Context, subdomain string) error
+
+	// UpsertTXTRecord creates or updates a TXT record.
+	UpsertTXTRecord(ctx context.Context, name, value string) error
+
+	// DeleteTXTRecord removes a TXT record.
+	DeleteTXTRecord(ctx context.Context, name, value string) error
 }
 
 // Route53Client defines the interface for Route53 operations we use.
@@ -97,6 +103,90 @@ func (s *Route53Service) DeleteRecord(ctx context.Context, subdomain string) err
 	// as we don't have a use case for deletion yet.
 	s.logger.Warn("delete record not fully implemented",
 		"subdomain", subdomain,
+		"recordName", recordName,
+	)
+	return nil
+}
+
+// UpsertTXTRecord creates or updates a TXT record.
+func (s *Route53Service) UpsertTXTRecord(ctx context.Context, name, value string) error {
+	recordName := fmt.Sprintf("%s.%s", name, RootDomain)
+
+	// TXT values must be quoted in Route53
+	quotedValue := fmt.Sprintf("\"%s\"", value)
+
+	input := &route53.ChangeResourceRecordSetsInput{
+		HostedZoneId: aws.String(s.hostedZoneID),
+		ChangeBatch: &types.ChangeBatch{
+			Comment: aws.String(fmt.Sprintf("ACME challenge for %s", name)),
+			Changes: []types.Change{
+				{
+					Action: types.ChangeActionUpsert,
+					ResourceRecordSet: &types.ResourceRecordSet{
+						Name: aws.String(recordName),
+						Type: types.RRTypeTxt,
+						TTL:  aws.Int64(DefaultTTL),
+						ResourceRecords: []types.ResourceRecord{
+							{Value: aws.String(quotedValue)},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := s.client.ChangeResourceRecordSets(ctx, input)
+	if err != nil {
+		s.logger.Error("failed to upsert TXT record",
+			"error", err,
+			"name", name,
+		)
+		return fmt.Errorf("failed to upsert TXT record: %w", err)
+	}
+
+	s.logger.Info("TXT record upserted",
+		"name", name,
+		"recordName", recordName,
+	)
+	return nil
+}
+
+// DeleteTXTRecord removes a TXT record.
+func (s *Route53Service) DeleteTXTRecord(ctx context.Context, name, value string) error {
+	recordName := fmt.Sprintf("%s.%s", name, RootDomain)
+	quotedValue := fmt.Sprintf("\"%s\"", value)
+
+	input := &route53.ChangeResourceRecordSetsInput{
+		HostedZoneId: aws.String(s.hostedZoneID),
+		ChangeBatch: &types.ChangeBatch{
+			Comment: aws.String(fmt.Sprintf("Remove ACME challenge for %s", name)),
+			Changes: []types.Change{
+				{
+					Action: types.ChangeActionDelete,
+					ResourceRecordSet: &types.ResourceRecordSet{
+						Name: aws.String(recordName),
+						Type: types.RRTypeTxt,
+						TTL:  aws.Int64(DefaultTTL),
+						ResourceRecords: []types.ResourceRecord{
+							{Value: aws.String(quotedValue)},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := s.client.ChangeResourceRecordSets(ctx, input)
+	if err != nil {
+		s.logger.Error("failed to delete TXT record",
+			"error", err,
+			"name", name,
+		)
+		return fmt.Errorf("failed to delete TXT record: %w", err)
+	}
+
+	s.logger.Info("TXT record deleted",
+		"name", name,
 		"recordName", recordName,
 	)
 	return nil

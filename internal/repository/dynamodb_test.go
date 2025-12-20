@@ -21,6 +21,7 @@ type mockDynamoDBClient struct {
 	putItemFunc    func(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	getItemFunc    func(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 	updateItemFunc func(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
+	deleteItemFunc func(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
 }
 
 func (m *mockDynamoDBClient) PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
@@ -42,6 +43,13 @@ func (m *mockDynamoDBClient) UpdateItem(ctx context.Context, params *dynamodb.Up
 		return m.updateItemFunc(ctx, params, optFns...)
 	}
 	return &dynamodb.UpdateItemOutput{}, nil
+}
+
+func (m *mockDynamoDBClient) DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
+	if m.deleteItemFunc != nil {
+		return m.deleteItemFunc(ctx, params, optFns...)
+	}
+	return &dynamodb.DeleteItemOutput{}, nil
 }
 
 func newTestLogger() *slog.Logger {

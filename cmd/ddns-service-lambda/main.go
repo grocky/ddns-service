@@ -147,6 +147,24 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		return jsonResponse(resp.Status, resp.Body)
 	}
 
+	// POST /acme-challenge - create ACME challenge TXT record (requires auth)
+	if method == http.MethodPost && route == "/acme-challenge" {
+		resp, reqErr := handlers.CreateACMEChallenge(ctx, request, repo, dnsSvc, logger)
+		if reqErr != nil {
+			return clientError(reqErr)
+		}
+		return jsonResponse(resp.Status, resp.Body)
+	}
+
+	// DELETE /acme-challenge - delete ACME challenge TXT record (requires auth)
+	if method == http.MethodDelete && route == "/acme-challenge" {
+		resp, reqErr := handlers.DeleteACMEChallenge(ctx, request, repo, dnsSvc, logger)
+		if reqErr != nil {
+			return clientError(reqErr)
+		}
+		return jsonResponse(resp.Status, resp.Body)
+	}
+
 	logger.Warn("resource not found", "route", route)
 	return clientError(&response.RequestError{
 		Status:      http.StatusNotFound,
