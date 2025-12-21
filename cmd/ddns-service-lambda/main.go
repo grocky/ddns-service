@@ -67,6 +67,48 @@ func initServices(ctx context.Context) error {
 	return initErr
 }
 
+// EventBridgeEvent represents an EventBridge scheduled event.
+type EventBridgeEvent struct {
+	Source string `json:"source"`
+	Action string `json:"action"`
+}
+
+// GenericHandler handles both API Gateway and EventBridge events.
+func GenericHandler(ctx context.Context, rawEvent json.RawMessage) (any, error) {
+	// Try to detect if this is an EventBridge event
+	var ebEvent EventBridgeEvent
+	if err := json.Unmarshal(rawEvent, &ebEvent); err == nil && ebEvent.Source == "ddns.acme-cleanup" {
+		return handleEventBridge(ctx, ebEvent)
+	}
+
+	// Otherwise, treat as API Gateway request
+	var request events.APIGatewayProxyRequest
+	if err := json.Unmarshal(rawEvent, &request); err != nil {
+		logger.Error("failed to unmarshal event", "error", err)
+		return nil, err
+	}
+
+	return Handler(ctx, request)
+}
+
+// handleEventBridge processes EventBridge scheduled events.
+func handleEventBridge(ctx context.Context, event EventBridgeEvent) (any, error) {
+	logger.Info("EventBridge event received", "source", event.Source, "action", event.Action)
+
+	if err := initServices(ctx); err != nil {
+		logger.Error("failed to initialize services", "error", err)
+		return nil, err
+	}
+
+	switch event.Action {
+	case "cleanup-expired-challenges":
+		return handlers.CleanupExpiredChallenges(ctx, repo, dnsSvc, logger)
+	default:
+		logger.Warn("unknown EventBridge action", "action", event.Action)
+		return nil, fmt.Errorf("unknown action: %s", event.Action)
+	}
+}
+
 // Handler handles API Gateway proxy requests.
 func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	method := request.HTTPMethod
@@ -226,5 +268,5 @@ func clientError(reqErr *response.RequestError) (events.APIGatewayProxyResponse,
 }
 
 func main() {
-	lambda.Start(Handler)
+	lambda.Start(GenericHandler)
 }

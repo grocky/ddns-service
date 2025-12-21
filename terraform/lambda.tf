@@ -51,7 +51,8 @@ resource "aws_iam_role_policy" "dynamodb" {
         ]
         Resource = [
           aws_dynamodb_table.ip_mappings.arn,
-          aws_dynamodb_table.owners.arn
+          aws_dynamodb_table.owners.arn,
+          aws_dynamodb_table.acme_challenges.arn
         ]
       }
     ]
@@ -171,4 +172,39 @@ resource "aws_lambda_permission" "apigw" {
   function_name = aws_lambda_function.ddns_service.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.ddns_service.execution_arn}/*/*"
+}
+
+# =============================================================================
+# ACME Challenge Cleanup (EventBridge Scheduled Rule)
+# =============================================================================
+
+resource "aws_cloudwatch_event_rule" "acme_cleanup" {
+  name                = "ddns-acme-challenge-cleanup"
+  description         = "Daily cleanup of expired ACME challenges"
+  schedule_expression = "cron(0 2 * * ? *)" # Daily at 2 AM UTC
+
+  tags = {
+    Name        = "ddns-acme-cleanup-${var.environment}"
+    Environment = var.environment
+    Application = "ddns-service"
+  }
+}
+
+resource "aws_cloudwatch_event_target" "acme_cleanup" {
+  rule      = aws_cloudwatch_event_rule.acme_cleanup.name
+  target_id = "ddns-acme-cleanup-lambda"
+  arn       = aws_lambda_function.ddns_service.arn
+
+  input = jsonencode({
+    source = "ddns.acme-cleanup"
+    action = "cleanup-expired-challenges"
+  })
+}
+
+resource "aws_lambda_permission" "eventbridge_acme_cleanup" {
+  statement_id  = "AllowEventBridgeACMECleanup"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.ddns_service.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.acme_cleanup.arn
 }

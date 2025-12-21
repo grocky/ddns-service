@@ -15,14 +15,15 @@ import (
 
 // mockRepository is a mock implementation of repository.Repository for testing.
 type mockRepository struct {
-	getOwnerFunc        func(ctx context.Context, ownerID string) (*domain.Owner, error)
-	createOwnerFunc     func(ctx context.Context, owner domain.Owner) error
-	updateOwnerKeyFunc  func(ctx context.Context, ownerID, newKeyHash string) error
-	putFunc             func(ctx context.Context, mapping domain.IPMapping) error
-	getFunc             func(ctx context.Context, ownerID, location string) (*domain.IPMapping, error)
-	putChallengeFunc    func(ctx context.Context, challenge domain.ACMEChallenge) error
-	getChallengeFunc    func(ctx context.Context, ownerID, location string) (*domain.ACMEChallenge, error)
-	deleteChallengeFunc func(ctx context.Context, ownerID, location string) error
+	getOwnerFunc              func(ctx context.Context, ownerID string) (*domain.Owner, error)
+	createOwnerFunc           func(ctx context.Context, owner domain.Owner) error
+	updateOwnerKeyFunc        func(ctx context.Context, ownerID, newKeyHash string) error
+	putFunc                   func(ctx context.Context, mapping domain.IPMapping) error
+	getFunc                   func(ctx context.Context, ownerID, location string) (*domain.IPMapping, error)
+	putChallengeFunc          func(ctx context.Context, challenge domain.ACMEChallenge) error
+	getChallengeFunc          func(ctx context.Context, ownerID, location string) (*domain.ACMEChallenge, error)
+	deleteChallengeFunc       func(ctx context.Context, ownerID, location string) error
+	scanExpiredChallengesFunc func(ctx context.Context) ([]domain.ACMEChallenge, error)
 }
 
 func (m *mockRepository) GetOwner(ctx context.Context, ownerID string) (*domain.Owner, error) {
@@ -79,6 +80,13 @@ func (m *mockRepository) DeleteChallenge(ctx context.Context, ownerID, location 
 		return m.deleteChallengeFunc(ctx, ownerID, location)
 	}
 	return nil
+}
+
+func (m *mockRepository) ScanExpiredChallenges(ctx context.Context) ([]domain.ACMEChallenge, error) {
+	if m.scanExpiredChallengesFunc != nil {
+		return m.scanExpiredChallengesFunc(ctx)
+	}
+	return nil, nil
 }
 
 func TestRegister_Success_AutoIP(t *testing.T) {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strconv"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -24,6 +26,7 @@ type DynamoDBClient interface {
 	GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 	UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
 	DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
+	Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error)
 }
 
 // DynamoDBRepository implements Repository using DynamoDB.
@@ -277,6 +280,38 @@ func (r *DynamoDBRepository) DeleteChallenge(ctx context.Context, ownerID, locat
 		"location", location,
 	)
 	return nil
+}
+
+// ScanExpiredChallenges returns all ACME challenges that have expired.
+// Uses a filter expression to find challenges where TTL is less than current time.
+func (r *DynamoDBRepository) ScanExpiredChallenges(ctx context.Context) ([]domain.ACMEChallenge, error) {
+	now := time.Now().Unix()
+
+	input := &dynamodb.ScanInput{
+		TableName:        aws.String(acmeChallengesTableName),
+		FilterExpression: aws.String("#ttl < :now"),
+		ExpressionAttributeNames: map[string]string{
+			"#ttl": "TTL",
+		},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":now": &types.AttributeValueMemberN{Value: strconv.FormatInt(now, 10)},
+		},
+	}
+
+	result, err := r.client.Scan(ctx, input)
+	if err != nil {
+		r.logger.Error("failed to scan expired challenges", "error", err)
+		return nil, err
+	}
+
+	var challenges []domain.ACMEChallenge
+	if err := attributevalue.UnmarshalListOfMaps(result.Items, &challenges); err != nil {
+		r.logger.Error("failed to unmarshal challenges", "error", err)
+		return nil, err
+	}
+
+	r.logger.Info("scanned expired challenges", "count", len(challenges))
+	return challenges, nil
 }
 
 // Ensure DynamoDBRepository implements Repository.

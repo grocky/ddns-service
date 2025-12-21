@@ -230,3 +230,72 @@ func DeleteACMEChallenge(
 		},
 	}, nil
 }
+
+// CleanupResult represents the result of the cleanup operation.
+type CleanupResult struct {
+	Processed int `json:"processed"`
+	Deleted   int `json:"deleted"`
+	Errors    int `json:"errors"`
+}
+
+// CleanupExpiredChallenges cleans up expired ACME challenges.
+// Called by EventBridge on a daily schedule to remove orphaned records.
+func CleanupExpiredChallenges(
+	ctx context.Context,
+	repo repository.Repository,
+	dnsService dns.Service,
+	logger *slog.Logger,
+) (*CleanupResult, error) {
+	logger.Info("starting ACME challenge cleanup")
+
+	result := &CleanupResult{}
+
+	// Scan for expired challenges
+	challenges, err := repo.ScanExpiredChallenges(ctx)
+	if err != nil {
+		logger.Error("failed to scan expired challenges", "error", err)
+		return nil, err
+	}
+
+	result.Processed = len(challenges)
+	logger.Info("found expired challenges", "count", len(challenges))
+
+	// Process each expired challenge
+	for _, challenge := range challenges {
+		// Delete Route53 TXT record
+		txtRecordName := dns.BuildACMEChallengeName(challenge.Subdomain)
+		if err := dnsService.DeleteTXTRecord(ctx, txtRecordName, challenge.TxtValue); err != nil {
+			logger.Warn("failed to delete TXT record",
+				"error", err,
+				"ownerId", challenge.OwnerID,
+				"location", challenge.LocationName,
+			)
+			// Continue anyway - the DNS record may have already been deleted
+		}
+
+		// Delete from DynamoDB
+		if err := repo.DeleteChallenge(ctx, challenge.OwnerID, challenge.LocationName); err != nil {
+			logger.Error("failed to delete challenge from DB",
+				"error", err,
+				"ownerId", challenge.OwnerID,
+				"location", challenge.LocationName,
+			)
+			result.Errors++
+			continue
+		}
+
+		result.Deleted++
+		logger.Info("cleaned up expired challenge",
+			"ownerId", challenge.OwnerID,
+			"location", challenge.LocationName,
+		)
+	}
+
+	logger.Info("ACME challenge cleanup completed",
+		"processed", result.Processed,
+		"deleted", result.Deleted,
+		"errors", result.Errors,
+	)
+
+	return result, nil
+}

@@ -32,6 +32,9 @@ type Repository interface {
 
 	// DeleteChallenge removes an ACME challenge.
 	DeleteChallenge(ctx context.Context, ownerID, location string) error
+
+	// ScanExpiredChallenges returns all ACME challenges that have expired.
+	ScanExpiredChallenges(ctx context.Context) ([]domain.ACMEChallenge, error)
 }
 
 // IsOwnerNotFound returns true if the error is ErrOwnerNotFound.

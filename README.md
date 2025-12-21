@@ -20,6 +20,7 @@ Traditional solutions require:
 - **Automatic DNS Updates** - Updates Route53 A records when your IP changes
 - **Stable Subdomains** - Each location gets a permanent subdomain (e.g., `a3f8c2d1.grocky.net`)
 - **Smart Client** - The `ddns-client` detects IP changes locally and updates the server
+- **SSL Certificates** - Built-in certbot integration for Let's Encrypt wildcard certificates
 - **Secure by default** - API key authentication protects your data
 - **Rate limited** - Prevents abuse with a maximum of 2 IP changes per hour
 - **Multi-location support** - Track IPs for multiple locations (home, office, cabin, etc.)
@@ -131,6 +132,8 @@ Authorization: Bearer ddns_sk_your_api_key_here
 | `POST /owners/{id}/rotate` | Required | No |
 | `POST /update` | Required | Yes (2/hour) |
 | `GET /lookup/{owner}/{location}` | Required | No |
+| `POST /acme-challenge` | Required | Yes (10/hour) |
+| `DELETE /acme-challenge` | Required | No |
 
 ### Create an Owner Account
 
@@ -390,6 +393,119 @@ remote a1b2c3d4.grocky.net 1194
 ```
 
 No need to update the configuration when your IP changes - the subdomain always points to your current IP!
+
+## SSL Certificates with Let's Encrypt
+
+DDNS Service supports automatic SSL certificate generation using Let's Encrypt's DNS-01 challenge. This allows you to get wildcard certificates for your dynamic DNS subdomain.
+
+### How It Works
+
+1. The `ddns-client` integrates with certbot as an authentication hook
+2. When certbot needs to validate domain ownership, it creates a TXT record via the DDNS API
+3. Let's Encrypt validates the TXT record and issues your certificate
+4. The cleanup hook removes the TXT record automatically
+
+### Getting SSL Certificates
+
+**Prerequisites:**
+- An existing DDNS location (run `ddns-client` at least once to register your IP)
+- certbot installed on your system
+
+**Step 1: Set up environment variables**
+
+```bash
+export DDNS_API_KEY=ddns_sk_your_api_key_here
+export DDNS_OWNER=my-home
+export DDNS_LOCATION=home
+```
+
+**Step 2: Request a certificate with certbot**
+
+```bash
+# Get a wildcard certificate for your subdomain
+certbot certonly --manual --preferred-challenges dns \
+  --manual-auth-hook "ddns-client --acme-auth" \
+  --manual-cleanup-hook "ddns-client --acme-cleanup" \
+  -d "*.a1b2c3d4.grocky.net" \
+  -d "a1b2c3d4.grocky.net"
+```
+
+The `ddns-client` automatically:
+- Creates the `_acme-challenge` TXT record with the validation token
+- Waits 60 seconds for DNS propagation (configurable with `--propagation-wait`)
+- Cleans up the TXT record after validation
+
+**Step 3: Set up automatic renewal**
+
+Add to your crontab or systemd timer:
+
+```bash
+# Renew certificates daily (certbot only renews when needed)
+0 3 * * * certbot renew --manual-auth-hook "ddns-client --acme-auth" --manual-cleanup-hook "ddns-client --acme-cleanup"
+```
+
+### ACME API Endpoints
+
+| Endpoint | Method | Authentication | Description |
+|----------|--------|----------------|-------------|
+| `/acme-challenge` | POST | Required | Create TXT record for DNS-01 challenge |
+| `/acme-challenge` | DELETE | Required | Delete TXT record after validation |
+
+**Create ACME Challenge:**
+
+```bash
+curl -X POST https://ddns.grocky.net/acme-challenge \
+  -H "Authorization: Bearer ddns_sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ownerId": "my-home",
+    "location": "home",
+    "txtValue": "abc123validationtoken"
+  }'
+```
+
+**Response:**
+```json
+{
+  "ownerId": "my-home",
+  "location": "home",
+  "subdomain": "a1b2c3d4.grocky.net",
+  "txtRecord": "_acme-challenge.a1b2c3d4.grocky.net",
+  "txtValue": "abc123validationtoken",
+  "createdAt": "2025-01-15T10:30:00Z",
+  "expiresAt": "2025-01-15T11:30:00Z"
+}
+```
+
+**Delete ACME Challenge:**
+
+```bash
+curl -X DELETE https://ddns.grocky.net/acme-challenge \
+  -H "Authorization: Bearer ddns_sk_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ownerId": "my-home",
+    "location": "home"
+  }'
+```
+
+**Response:**
+```json
+{
+  "ownerId": "my-home",
+  "location": "home",
+  "subdomain": "a1b2c3d4.grocky.net",
+  "txtRecord": "_acme-challenge.a1b2c3d4.grocky.net",
+  "deleted": true
+}
+```
+
+### Notes
+
+- ACME challenges expire after 1 hour (auto-deleted by DynamoDB TTL)
+- Rate limited to 10 challenges per hour per owner
+- Requires an existing IP mapping for the location (run `ddns-client` first to register)
+- A daily cleanup job removes any orphaned DNS records
 
 ## Rate Limiting
 
